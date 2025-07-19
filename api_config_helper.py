@@ -179,7 +179,7 @@ class UniversalAPIHelper:
                 choice = input(f"选择服务商 (1-{len(sorted_services)}): ").strip()
                 choice = int(choice)
                 if 1 <= choice <= len(sorted_services):
-                    service_key = list(sorted_services.keys())[choice - 1]
+                    service_key = sorted_services[choice - 1][0]  # 修复这里的错误
                     return self._configure_service(service_key)
                 else:
                     print("❌ 无效选择")
@@ -210,27 +210,10 @@ class UniversalAPIHelper:
                 choice = input(f"选择服务商 (1-{len(sorted_services)}): ").strip()
                 choice = int(choice)
                 if 1 <= choice <= len(sorted_services):
-                    service_key = list(sorted_services.keys())[choice - 1]
+                    service_key = sorted_services[choice - 1][0]  # 修复这里的错误
                     return self._configure_service(service_key)
                 else:
                     print("❌ 无效选择")
-            except ValueError:
-                print("❌ 请输入数字")
-
-        while True:
-            try:
-                choice = input(f"\n请选择服务商 (0-{len(sorted_services)}): ")
-                choice = int(choice)
-
-                if choice == 0:
-                    return {'enabled': False, 'provider': 'none'}
-                elif 1 <= choice <= len(sorted_services) - 1:
-                    service_key = list(dict(sorted_services).keys())[choice - 1]
-                    return self._configure_service(service_key)
-                elif choice == len(sorted_services):
-                    return self._configure_custom_service()
-                else:
-                    print("❌ 无效选择，请重试")
             except ValueError:
                 print("❌ 请输入数字")
 
