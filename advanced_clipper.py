@@ -17,6 +17,7 @@ import re
 import json
 import requests
 import subprocess
+import sys
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 
@@ -504,15 +505,18 @@ class AdvancedIntelligentClipper:
             end_seconds = self.time_to_seconds(clip['end_time'])
             duration = end_seconds - start_seconds
             
-            # 输出文件名
-            safe_title = re.sub(r'[^\w\-_\.]', '_', clip['title'])
+            # 输出文件名 - 避免特殊字符
+            safe_title = re.sub(r'[^\w\-_\.]', '_', clip['title'])[:20]  # 限制长度
             output_name = f"E{episode_number}_C{clip['clip_id']:02d}_{safe_title}.mp4"
             output_path = os.path.join(self.output_folder, output_name)
             
             print(f"  🎬 剪切片段 {clip['clip_id']}: {clip['title']}")
             print(f"     时间: {clip['start_time']} --> {clip['end_time']} ({duration:.1f}秒)")
             
-            # FFmpeg剪切命令
+            # 动态调整超时时间和处理参数
+            timeout_seconds = max(120, duration * 3)  # 至少2分钟，长视频更多时间
+            
+            # FFmpeg剪切命令 - Windows兼容性优化
             cmd = [
                 'ffmpeg',
                 '-i', video_file,
@@ -520,26 +524,66 @@ class AdvancedIntelligentClipper:
                 '-t', str(duration),
                 '-c:v', 'libx264',
                 '-c:a', 'aac',
-                '-preset', 'medium',
-                '-crf', '23',
+                '-preset', 'fast',  # 使用fast预设提高速度
+                '-crf', '25',       # 稍微降低质量换取速度
                 '-avoid_negative_ts', 'make_zero',
+                '-threads', '4',    # 限制线程数避免系统过载
+                '-movflags', '+faststart',
                 output_path,
                 '-y'
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            # Windows环境特殊处理
+            import sys
+            if sys.platform.startswith('win'):
+                # 使用错误忽略模式避免编码问题
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True, 
+                    encoding='utf-8', 
+                    errors='ignore',
+                    timeout=timeout_seconds,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+            else:
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=timeout_seconds
+                )
             
             if result.returncode == 0 and os.path.exists(output_path):
-                # 添加专业字幕和旁白
-                self.add_professional_narration(output_path, clip)
-                
-                file_size = os.path.getsize(output_path) / (1024*1024)
-                print(f"     ✅ 创建成功: {output_name} ({file_size:.1f}MB)")
-                return output_path
+                # 检查文件大小
+                if os.path.getsize(output_path) > 1024:  # 至少1KB
+                    # 添加专业字幕和旁白
+                    self.add_professional_narration(output_path, clip)
+                    
+                    file_size = os.path.getsize(output_path) / (1024*1024)
+                    print(f"     ✅ 创建成功: {output_name} ({file_size:.1f}MB)")
+                    return output_path
+                else:
+                    print(f"     ❌ 输出文件太小，可能剪切失败")
+                    if os.path.exists(output_path):
+                        os.remove(output_path)
+                    return None
             else:
-                print(f"     ❌ 剪切失败: {result.stderr[:100]}")
+                # 安全地获取错误信息
+                try:
+                    error_msg = result.stderr[:200] if result.stderr else "未知错误"
+                    print(f"     ❌ 剪切失败: {error_msg}")
+                except:
+                    print(f"     ❌ 剪切失败，FFmpeg返回码: {result.returncode}")
                 return None
                 
+        except subprocess.TimeoutExpired:
+            print(f"     ❌ 剪切超时 ({timeout_seconds}秒) - 视频可能太大或系统资源不足")
+            return None
+        except UnicodeDecodeError as e:
+            print(f"     ❌ 编码错误: {e}")
+            print("     💡 建议：检查视频文件路径是否包含中文字符")
+            return None
         except Exception as e:
             print(f"     ❌ 处理出错: {e}")
             return None
@@ -547,39 +591,25 @@ class AdvancedIntelligentClipper:
     def add_professional_narration(self, video_path: str, clip: Dict):
         """添加专业旁白和字幕"""
         try:
+            # 暂时跳过字幕添加，避免复杂的编码问题
+            print(f"       ⚠ 跳过字幕添加（避免编码问题）")
+            return
+            
             temp_path = video_path.replace('.mp4', '_narrated.mp4')
             
             narration = clip.get('narration', {})
             title = clip.get('title', '精彩片段')
-            significance = clip.get('plot_significance', '')
             
-            # 清理文本
-            title_clean = title.replace("'", "").replace('"', '').replace(':', '-')[:30]
-            opening_clean = narration.get('opening', '').replace("'", "").replace('"', '')[:40]
-            context_clean = narration.get('context', '').replace("'", "").replace('"', '')[:50]
+            # 简化文本处理 - 只保留英文和数字
+            title_clean = re.sub(r'[^\w\s]', '', title)[:20]
+            if not title_clean.strip():
+                title_clean = "Highlight"
             
-            # 构建字幕滤镜
-            filter_parts = []
-            
-            # 标题 (0-3秒)
-            filter_parts.append(
-                f"drawtext=text='{title_clean}':fontsize=28:fontcolor=white:x=(w-text_w)/2:y=60:"
-                f"box=1:boxcolor=black@0.8:boxborderw=6:enable='between(t,0,3)'"
+            # 简化的字幕滤镜 - 只添加标题
+            filter_text = (
+                f"drawtext=text='{title_clean}':fontsize=24:fontcolor=white:"
+                f"x=(w-text_w)/2:y=50:box=1:boxcolor=black@0.7:enable='between(t,0,3)'"
             )
-            
-            # 开场解说 (1-5秒)
-            filter_parts.append(
-                f"drawtext=text='{opening_clean}':fontsize=18:fontcolor=yellow:x=(w-text_w)/2:y=110:"
-                f"box=1:boxcolor=black@0.7:boxborderw=4:enable='between(t,1,5)'"
-            )
-            
-            # 背景解释 (6秒后)
-            filter_parts.append(
-                f"drawtext=text='{context_clean}':fontsize=16:fontcolor=lightblue:x=(w-text_w)/2:y=(h-80):"
-                f"box=1:boxcolor=black@0.6:boxborderw=3:enable='gt(t,6)'"
-            )
-            
-            filter_text = ",".join(filter_parts)
             
             cmd = [
                 'ffmpeg',
@@ -587,22 +617,41 @@ class AdvancedIntelligentClipper:
                 '-vf', filter_text,
                 '-c:a', 'copy',
                 '-c:v', 'libx264',
-                '-preset', 'medium',
-                '-crf', '22',
+                '-preset', 'fast',
+                '-crf', '25',
                 temp_path,
                 '-y'
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            import sys
+            if sys.platform.startswith('win'):
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True,
+                    encoding='utf-8', 
+                    errors='ignore',
+                    timeout=60,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+            else:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             
-            if result.returncode == 0:
-                os.replace(temp_path, video_path)
-                print(f"       ✓ 添加旁白字幕完成")
+            if result.returncode == 0 and os.path.exists(temp_path):
+                try:
+                    os.replace(temp_path, video_path)
+                    print(f"       ✓ 添加旁白字幕完成")
+                except:
+                    print(f"       ⚠ 文件替换失败，保留原视频")
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
             else:
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
-                print(f"       ⚠ 添加旁白失败: {result.stderr[:50]}")
+                print(f"       ⚠ 添加旁白失败，保留原视频")
                 
+        except subprocess.TimeoutExpired:
+            print(f"       ⚠ 添加旁白超时，保留原视频")
         except Exception as e:
             print(f"       ⚠ 添加旁白出错: {e}")
 
