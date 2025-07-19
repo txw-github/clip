@@ -7,6 +7,7 @@
 
 import os
 import json
+import time
 import requests
 from openai import OpenAI
 from typing import Dict, Any, Optional, List
@@ -463,40 +464,62 @@ class UniversalAPIHelper:
 
     def _call_openai_compatible_api(self, prompt: str, config: Dict[str, Any]) -> Optional[str]:
         """调用OpenAI兼容API"""
-        try:
-            # Gemini官方API特殊处理
-            if config.get('api_type') == 'gemini_official':
-                return self._call_gemini_official_api(prompt, config)
-            
-            client = OpenAI(
-                base_url=config['base_url'],
-                api_key=config['api_key']
-            )
+        max_retries = 3
+        
+        for attempt in range(max_retries):
+            try:
+                # Gemini官方API特殊处理
+                if config.get('api_type') == 'gemini_official':
+                    return self._call_gemini_official_api(prompt, config)
+                
+                print(f"🤖 API调用尝试 {attempt + 1}/{max_retries}")
+                
+                client = OpenAI(
+                    base_url=config['base_url'],
+                    api_key=config['api_key'],
+                    timeout=30.0  # 增加超时时间
+                )
 
-            extra_headers = config.get('extra_headers', {})
+                extra_headers = config.get('extra_headers', {})
 
-            completion = client.chat.completions.create(
-                model=config['model'],
-                messages=[
-                    {'role': 'system', 'content': '你是专业的电视剧剧情分析师，专注于识别精彩片段并制定最佳剪辑方案。'},
-                    {'role': 'user', 'content': prompt}
-                ],
-                max_tokens=2000,
-                temperature=0.7,
-                extra_headers=extra_headers
-            )
+                completion = client.chat.completions.create(
+                    model=config['model'],
+                    messages=[
+                        {'role': 'system', 'content': '你是专业的电视剧剧情分析师，专注于识别精彩片段并制定最佳剪辑方案。'},
+                        {'role': 'user', 'content': prompt}
+                    ],
+                    max_tokens=2000,
+                    temperature=0.7,
+                    extra_headers=extra_headers
+                )
 
-            # 处理DeepSeek-R1的特殊输出格式
-            message = completion.choices[0].message
-            if hasattr(message, 'reasoning_content') and message.reasoning_content:
-                # 如果有推理内容，可以选择是否包含
-                return message.content
-            else:
-                return message.content
+                # 处理DeepSeek-R1的特殊输出格式
+                message = completion.choices[0].message
+                if hasattr(message, 'reasoning_content') and message.reasoning_content:
+                    return message.content
+                else:
+                    return message.content
 
-        except Exception as e:
-            print(f"OpenAI兼容API调用失败: {e}")
-            return None
+            except Exception as e:
+                error_msg = str(e)
+                if "10054" in error_msg or "远程主机" in error_msg:
+                    print(f"🔌 连接被重置 (10054错误)，尝试 {attempt + 1}/{max_retries}")
+                elif "timeout" in error_msg.lower():
+                    print(f"⏰ 请求超时，尝试 {attempt + 1}/{max_retries}")
+                elif "429" in error_msg:
+                    print(f"🚦 API限速，尝试 {attempt + 1}/{max_retries}")
+                else:
+                    print(f"❌ API调用错误: {error_msg}")
+                
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt  # 指数退避
+                    print(f"⏰ 等待 {wait_time} 秒后重试...")
+                    time.sleep(wait_time)
+                else:
+                    print("❌ 所有API调用尝试都失败了")
+                    return None
+        
+        return None
 
     def _test_gemini_official_api(self, config: Dict[str, Any]) -> bool:
         """测试Gemini官方API"""

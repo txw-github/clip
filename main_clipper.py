@@ -167,11 +167,20 @@ class UnifiedVideoClipper:
 }}"""
 
         try:
+            print(f"  🤖 调用AI分析...")
             response = config_helper.call_ai_api(prompt, self.config)
             if response:
+                print(f"  ✅ AI分析完成")
                 return self.parse_ai_response(response)
+            else:
+                print(f"  ⚠️ AI分析返回空结果，使用备用分析")
         except Exception as e:
-            print(f"  AI分析失败: {e}")
+            error_msg = str(e)
+            if "10054" in error_msg or "远程主机" in error_msg:
+                print(f"  🔌 网络连接中断 (Error 10054)")
+                print(f"  💡 建议: 检查网络连接或更换API服务商")
+            else:
+                print(f"  ❌ AI分析失败: {e}")
         
         return self.fallback_analysis(episode_file)
 
