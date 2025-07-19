@@ -130,47 +130,66 @@ class UnifiedVideoClipper:
         return content
 
     def analyze_episode(self, subtitles: List[Dict], episode_file: str) -> Dict:
-        """AI分析整集内容"""
+        """AI分析整集内容 - 一次性分析完整剧情，避免割裂"""
         if not self.enabled or not subtitles:
             return self.fallback_analysis(episode_file)
         
-        # 构建完整文本（每10分钟一段，避免文本过长）
-        full_text = self.build_episode_text(subtitles)
+        # 构建完整剧情文本 - 保持时间线和上下文
+        full_episode_text = self.build_complete_episode_context(subtitles)
         
         # 提取集数
         episode_match = re.search(r'[Ee](\d+)', episode_file)
         episode_num = episode_match.group(1) if episode_match else "1"
         
-        prompt = f"""分析第{episode_num}集电视剧内容，识别3-5个最精彩的片段用于制作短视频。
+        prompt = f"""你是专业的电视剧剪辑师。请分析第{episode_num}集的完整剧情，一次性识别3-5个最精彩、最连贯的片段。
 
-【剧情内容】
-{full_text[:3000]}...
+【完整剧情内容（按时间顺序）】
+{full_episode_text}
 
-要求：
-1. 每个片段要有完整的故事情节
-2. 包含情感高潮或剧情转折
-3. 时长2-3分钟最佳
-4. 确保片段间连贯性
+请进行整体剧情分析：
+
+1. **完整剧情理解**：
+   - 理解整集的核心故事线
+   - 识别主要角色关系和冲突发展
+   - 把握剧情节奏和情感变化
+
+2. **精彩片段选择**（3-5个）：
+   - 每个片段必须是完整的故事单元（有起承转合）
+   - 片段间要有逻辑连贯性，能串联成完整故事
+   - 优先选择包含关键信息、戏剧冲突、情感高潮的部分
+   - 每个片段控制在90-180秒
+
+3. **剧情连贯性**：
+   - 确保选出的片段组合起来能完整叙述本集故事
+   - 考虑前后呼应和伏笔揭示
+   - 处理可能的剧情反转
 
 请返回JSON格式：
 {{
-    "episode_theme": "本集主题",
+    "episode_theme": "本集核心主题",
+    "story_arc": "整体故事弧线描述",
+    "key_plot_points": ["关键剧情点1", "关键剧情点2"],
     "highlights": [
         {{
             "title": "片段标题",
-            "time_range": "大约时间（如：10-13分钟）",
-            "plot_point": "核心剧情点",
-            "emotional_impact": "情感冲击",
-            "key_content": "关键内容描述"
+            "start_minute": 开始分钟数,
+            "end_minute": 结束分钟数,
+            "plot_significance": "剧情重要性",
+            "emotional_core": "情感核心",
+            "key_dialogue": "关键对话内容",
+            "connection_to_story": "与整体故事的关系",
+            "why_essential": "为什么这个片段不可缺少"
         }}
-    ]
+    ],
+    "narrative_flow": "片段间的叙事流程",
+    "missing_context": "如果只看这些片段，观众还需要了解什么背景"
 }}"""
 
         try:
-            print(f"  🤖 调用AI分析...")
+            print(f"  🤖 AI整体剧情分析中...")
             response = config_helper.call_ai_api(prompt, self.config)
             if response:
-                print(f"  ✅ AI分析完成")
+                print(f"  ✅ 完整剧情分析完成")
                 return self.parse_ai_response(response)
             else:
                 print(f"  ⚠️ AI分析返回空结果，使用备用分析")
@@ -184,25 +203,43 @@ class UnifiedVideoClipper:
         
         return self.fallback_analysis(episode_file)
 
-    def build_episode_text(self, subtitles: List[Dict]) -> str:
-        """构建完整剧情文本"""
-        # 每600秒（10分钟）分一段
-        segments = []
-        current_segment = []
-        last_time = 0
+    def build_complete_episode_context(self, subtitles: List[Dict]) -> str:
+        """构建保持时间线的完整剧情上下文"""
+        # 不再强制分割，保持自然的对话流
+        episode_content = []
+        current_time_block = []
+        last_minute = -1
         
         for subtitle in subtitles:
-            current_segment.append(subtitle['text'])
+            current_minute = int(subtitle['start_seconds'] // 60)
             
-            if subtitle['start_seconds'] - last_time >= 600:
-                segments.append(' '.join(current_segment))
-                current_segment = []
-                last_time = subtitle['start_seconds']
+            # 每5分钟添加一个时间标记，但不强制分割
+            if current_minute != last_minute and current_minute % 5 == 0:
+                if current_time_block:
+                    episode_content.append(' '.join(current_time_block))
+                    current_time_block = []
+                episode_content.append(f"\n[{current_minute}分钟]\n")
+                last_minute = current_minute
+            
+            current_time_block.append(subtitle['text'])
         
-        if current_segment:
-            segments.append(' '.join(current_segment))
+        # 添加最后一段
+        if current_time_block:
+            episode_content.append(' '.join(current_time_block))
         
-        return '\n\n[时间段分割]\n\n'.join(segments)
+        full_text = ''.join(episode_content)
+        
+        # 如果文本太长，智能截取但保持完整性
+        if len(full_text) > 8000:
+            # 截取前80%，确保包含完整的剧情发展
+            cutoff = int(len(full_text) * 0.8)
+            # 找到最近的句号或感叹号，确保句子完整
+            for i in range(cutoff, min(cutoff + 200, len(full_text))):
+                if full_text[i] in '。！？':
+                    full_text = full_text[:i+1] + "\n\n[剧情继续，因篇幅限制仅分析至此]"
+                    break
+        
+        return full_text
 
     def parse_ai_response(self, response: str) -> Dict:
         """解析AI响应"""
@@ -241,42 +278,43 @@ class UnifiedVideoClipper:
         }
 
     def find_highlights(self, subtitles: List[Dict], analysis: Dict) -> List[Dict]:
-        """根据分析结果找到具体的字幕片段"""
+        """根据AI分析结果找到具体的连贯字幕片段"""
         highlights = analysis.get('highlights', [])
         result_clips = []
         
         for highlight in highlights:
-            # 解析时间范围
-            time_range = highlight.get('time_range', '')
-            time_match = re.search(r'(\d+)-(\d+)分钟', time_range)
+            # 使用AI提供的分钟范围
+            start_min = highlight.get('start_minute', 0)
+            end_min = highlight.get('end_minute', start_min + 3)
             
-            if time_match:
-                start_min = int(time_match.group(1))
-                end_min = int(time_match.group(2))
+            start_seconds = start_min * 60
+            end_seconds = end_min * 60
+            
+            # 找到时间范围内的所有字幕
+            segment_subs = [sub for sub in subtitles 
+                          if start_seconds <= sub['start_seconds'] <= end_seconds]
+            
+            if segment_subs:
+                # 扩展边界确保完整场景
+                complete_segment = self.ensure_complete_scene(segment_subs, subtitles, start_seconds, end_seconds)
                 
-                start_seconds = start_min * 60
-                end_seconds = end_min * 60
-                
-                # 找到对应字幕
-                segment_subs = [sub for sub in subtitles 
-                              if start_seconds <= sub['start_seconds'] <= end_seconds]
-                
-                if segment_subs:
-                    # 确保句子完整
-                    complete_segment = self.ensure_complete_sentences(segment_subs, subtitles)
-                    
+                if complete_segment and len(complete_segment) >= 3:  # 至少3条字幕
                     result_clips.append({
                         'title': highlight.get('title', '精彩片段'),
                         'subtitles': complete_segment,
-                        'plot_point': highlight.get('plot_point', ''),
-                        'emotional_impact': highlight.get('emotional_impact', ''),
-                        'key_content': highlight.get('key_content', '')
+                        'plot_significance': highlight.get('plot_significance', ''),
+                        'emotional_core': highlight.get('emotional_core', ''),
+                        'key_dialogue': highlight.get('key_dialogue', ''),
+                        'connection_to_story': highlight.get('connection_to_story', ''),
+                        'why_essential': highlight.get('why_essential', ''),
+                        'ai_selected': True
                     })
         
         return result_clips
 
-    def ensure_complete_sentences(self, segment_subs: List[Dict], all_subs: List[Dict]) -> List[Dict]:
-        """确保句子完整性"""
+    def ensure_complete_scene(self, segment_subs: List[Dict], all_subs: List[Dict], 
+                            target_start: float, target_end: float) -> List[Dict]:
+        """确保完整场景边界，而不是简单的句子完整性"""
         if not segment_subs:
             return []
         
@@ -286,21 +324,53 @@ class UnifiedVideoClipper:
         end_idx = next((i for i, sub in enumerate(all_subs) 
                        if sub['index'] == segment_subs[-1]['index']), len(all_subs) - 1)
         
-        # 向前扩展确保开头完整
-        while start_idx > 0:
-            prev_sub = all_subs[start_idx - 1]
-            if prev_sub['text'].endswith(('。', '！', '？', '.', '!', '?')):
-                break
-            start_idx -= 1
+        # 场景开始标识词
+        scene_starters = ['突然', '这时', '忽然', '当时', '那时', '现在', '接着', '然后', '随后']
+        # 场景结束标识词  
+        scene_enders = ['走了', '离开了', '结束了', '完了', '好了', '算了', '再见', '拜拜']
         
-        # 向后扩展确保结尾完整
-        while end_idx < len(all_subs) - 1:
-            current_sub = all_subs[end_idx]
-            if current_sub['text'].endswith(('。', '！', '？', '.', '!', '?')):
+        # 向前扩展寻找场景开始
+        extend_start = start_idx
+        for i in range(start_idx - 1, max(0, start_idx - 15), -1):  # 最多向前15条
+            text = all_subs[i]['text']
+            # 如果找到明显的场景开始，就从这里开始
+            if any(starter in text for starter in scene_starters):
+                extend_start = i
                 break
-            end_idx += 1
+            # 如果遇到明显的场景结束，就不再向前
+            if any(ender in text for ender in scene_enders):
+                break
+            # 如果时间差距太大（超过30秒），停止扩展
+            if start_idx > 0 and all_subs[start_idx]['start_seconds'] - all_subs[i]['start_seconds'] > 30:
+                break
         
-        return all_subs[start_idx:end_idx + 1]
+        # 向后扩展寻找场景结束
+        extend_end = end_idx
+        for i in range(end_idx + 1, min(len(all_subs), end_idx + 15)):  # 最多向后15条
+            text = all_subs[i]['text']
+            # 如果找到明显的场景结束，就在这里结束
+            if any(ender in text for ender in scene_enders):
+                extend_end = i
+                break
+            # 如果遇到新场景开始，停止扩展
+            if any(starter in text for starter in scene_starters):
+                break
+            # 如果时间差距太大（超过30秒），停止扩展
+            if all_subs[i]['start_seconds'] - all_subs[end_idx]['start_seconds'] > 30:
+                break
+        
+        final_segment = all_subs[extend_start:extend_end + 1]
+        
+        # 检查最终片段的合理性
+        if final_segment:
+            duration = final_segment[-1]['end_seconds'] - final_segment[0]['start_seconds']
+            # 如果片段太短或太长，回退到原始范围加小幅扩展
+            if duration < 60 or duration > 300:
+                buffer_start = max(0, start_idx - 5)
+                buffer_end = min(len(all_subs) - 1, end_idx + 5)
+                final_segment = all_subs[buffer_start:buffer_end + 1]
+        
+        return final_segment
 
     def create_clips(self, episode_file: str, highlights: List[Dict]) -> List[str]:
         """创建视频片段"""
