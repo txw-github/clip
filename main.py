@@ -508,7 +508,7 @@ class AIClipperSystem:
             
             print("\n选择操作:")
             print("1. 📝 智能分析字幕")
-            print("2. 🎬 智能视频剪辑 (需先分析)")
+            print("2. 🎬 高级智能剪辑 (推荐)")
             print("3. 🤖 配置AI接口")
             print("4. 📊 查看分析报告")
             print("5. ❌ 退出")
@@ -520,26 +520,47 @@ class AIClipperSystem:
                     self.analyze_all_episodes()
                     
                 elif choice == '2':
-                    # 视频剪辑
-                    print("\n🎬 启动智能视频剪辑...")
+                    # 高级智能剪辑
+                    print("\n🚀 启动高级智能剪辑系统...")
+                    print("特性：")
+                    print("• AI深度剧情理解，非固定规则")
+                    print("• 完整上下文分析，避免剧情割裂")  
+                    print("• 多段精彩识别，每集3-5个短视频")
+                    print("• 自动视频剪辑+专业旁白")
+                    print("• 保证跨集剧情连贯性")
+                    print("• 字幕放srt/目录，视频放videos/目录")
+                    
                     try:
-                        from intelligent_clipper import process_intelligent_clipping
-                        process_intelligent_clipping()
+                        from advanced_clipper import AdvancedIntelligentClipper
+                        clipper = AdvancedIntelligentClipper()
+                        clipper.run_complete_analysis()
                     except ImportError:
-                        print("❌ 视频剪辑模块未找到")
+                        print("❌ 高级剪辑模块未找到")
                     except Exception as e:
-                        print(f"❌ 视频剪辑出错: {e}")
+                        print(f"❌ 高级剪辑出错: {e}")
                     
                 elif choice == '3':
                     self.setup_ai_config()
                     
                 elif choice == '4':
-                    if os.path.exists('智能分析报告.txt'):
-                        with open('智能分析报告.txt', 'r', encoding='utf-8') as f:
-                            print("\n📄 最新分析报告:")
-                            print(f.read()[:2000])  # 显示前2000字符
-                            print("...")
-                    else:
+                    # 查看多种报告
+                    reports = [
+                        '智能分析报告.txt',
+                        'intelligent_clips/完整剧集连贯性分析.txt',
+                        'smart_analysis_report.txt'
+                    ]
+                    
+                    found_report = False
+                    for report_file in reports:
+                        if os.path.exists(report_file):
+                            with open(report_file, 'r', encoding='utf-8') as f:
+                                print(f"\n📄 {report_file}:")
+                                content = f.read()
+                                print(content[:1500] + "..." if len(content) > 1500 else content)
+                                found_report = True
+                                break
+                    
+                    if not found_report:
                         print("❌ 未找到分析报告，请先执行分析")
                         
                 elif choice == '5':
