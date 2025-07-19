@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "provider": "suanli",
+  "api_key": "sk-3x76MdOlrb0SUZ2fOLPalQZEGHhuF9Zaq0hJPQxoWKpqVfGg",
+  "model": "QwQ-32B",
+  "base_url": "https://api.suanli.cn/v1",
+  "api_type": "openai_compatible",
+  "extra_headers": {}
+}
