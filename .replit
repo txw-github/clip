@@ -4,7 +4,7 @@ modules = ["python-3.12"]
 channel = "stable-24_05"
 
 [workflows]
-runButton = "运行增强剪辑系统"
+runButton = "运行清理版剪辑系统"
 
 [[workflows.workflow]]
 name = "运行智能剪辑系统"
@@ -27,3 +27,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python run_enhanced_system.py"
+
+[[workflows.workflow]]
+name = "运行清理版剪辑系统"
+author = 45250602
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python clean_start.py"
