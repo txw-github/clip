@@ -267,6 +267,11 @@ class UniversalAPIHelper:
     def _test_openai_compatible_api(self, config: Dict[str, Any]) -> bool:
         """测试OpenAI兼容API"""
         try:
+            print(f"📡 正在测试连接...")
+            print(f"   API地址: {config['base_url']}")
+            print(f"   模型: {config['model']}")
+            print(f"   密钥前缀: {config['api_key'][:10]}...")
+            
             client = OpenAI(
                 base_url=config['base_url'],
                 api_key=config['api_key']
@@ -276,18 +281,41 @@ class UniversalAPIHelper:
 
             completion = client.chat.completions.create(
                 model=config['model'],
-                messages=[{'role': 'user', 'content': 'test'}],
-                max_tokens=5,
+                messages=[{'role': 'user', 'content': 'hello'}],
+                max_tokens=10,
                 extra_headers=extra_headers
             )
+            print(f"✅ API响应成功: {completion.choices[0].message.content[:20]}...")
             return True
         except Exception as e:
-            print(f"OpenAI兼容测试失败: {e}")
+            error_msg = str(e)
+            print(f"❌ API连接详细错误:")
+            
+            if "401" in error_msg or "Unauthorized" in error_msg:
+                print(f"   🔑 API密钥无效或已过期")
+                print(f"   💡 请检查您的API密钥是否正确")
+            elif "403" in error_msg or "Forbidden" in error_msg:
+                print(f"   🚫 访问被拒绝")
+                print(f"   💡 可能是账户余额不足或模型权限问题")
+            elif "404" in error_msg or "Not Found" in error_msg:
+                print(f"   🔍 API地址或模型不存在")
+                print(f"   💡 请检查API地址和模型名称是否正确")
+            elif "timeout" in error_msg.lower():
+                print(f"   ⏰ 连接超时")
+                print(f"   💡 请检查网络连接或稍后重试")
+            elif "connection" in error_msg.lower():
+                print(f"   🌐 网络连接问题")
+                print(f"   💡 请检查网络连接或防火墙设置")
+            else:
+                print(f"   ❓ 未知错误: {error_msg}")
+            
             return False
 
     def _test_custom_api(self, config: Dict[str, Any]) -> bool:
         """测试自定义格式API"""
         try:
+            print(f"📡 正在测试自定义API连接...")
+            
             headers = {
                 'Authorization': f'Bearer {config["api_key"]}',
                 'Content-Type': 'application/json'
@@ -296,15 +324,37 @@ class UniversalAPIHelper:
 
             data = {
                 'model': config['model'],
-                'messages': [{'role': 'user', 'content': 'test'}],
-                'max_tokens': 5
+                'messages': [{'role': 'user', 'content': 'hello'}],
+                'max_tokens': 10
             }
 
             url = config['base_url'].rstrip('/') + '/chat/completions'
-            response = requests.post(url, headers=headers, json=data, timeout=10)
-            return response.status_code == 200
+            print(f"   请求URL: {url}")
+            
+            response = requests.post(url, headers=headers, json=data, timeout=15)
+            
+            print(f"   HTTP状态码: {response.status_code}")
+            
+            if response.status_code == 200:
+                try:
+                    result = response.json()
+                    content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    print(f"✅ API响应成功: {content[:20]}...")
+                    return True
+                except:
+                    print(f"⚠️ 响应格式异常，但连接成功")
+                    return True
+            else:
+                print(f"❌ API返回错误: {response.status_code}")
+                try:
+                    error_detail = response.json()
+                    print(f"   错误详情: {error_detail}")
+                except:
+                    print(f"   错误内容: {response.text[:200]}")
+                return False
+                
         except Exception as e:
-            print(f"自定义API测试失败: {e}")
+            print(f"❌ 自定义API测试失败: {e}")
             return False
 
     def call_ai_api(self, prompt: str, config: Dict[str, Any]) -> Optional[str]:
