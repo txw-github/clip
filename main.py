@@ -46,42 +46,82 @@ class AIClipperSystem:
             json.dump(config, f, indent=2, ensure_ascii=False)
 
     def setup_ai_config(self):
-        """设置AI配置"""
+        """设置AI配置 - 使用通用配置助手"""
         print("\n🤖 智能AI分析配置")
         print("=" * 50)
-        print("支持的模型:")
-        for i, model in enumerate(self.supported_models, 1):
-            print(f"{i}. {model}")
+        
+        try:
+            from api_config_helper import config_helper
+            config = config_helper.interactive_setup()
+            
+            if config.get('enabled'):
+                self.ai_config = config
+                print("✅ AI配置成功！")
+                return True
+            else:
+                print("⚠️ 跳过AI配置，将使用基础分析模式")
+                return False
+                
+        except ImportError:
+            print("❌ 配置助手模块未找到，使用简化配置")
+            return self.setup_simple_ai_config()
+        except Exception as e:
+            print(f"❌ 配置过程出错: {e}")
+            return False
 
-        while True:
-            try:
-                choice = input(f"\n选择模型 (1-{len(self.supported_models)}): ")
-                if choice.isdigit() and 1 <= int(choice) <= len(self.supported_models):
-                    selected_model = self.supported_models[int(choice) - 1]
-                    break
-                else:
-                    print("❌ 无效选择，请重试")
-            except:
-                print("❌ 请输入数字")
-
+    def setup_simple_ai_config(self):
+        """简化的AI配置（备用方案）"""
+        print("\n📝 简化AI配置")
+        print("=" * 30)
+        
         api_key = input("输入API密钥: ").strip()
         if not api_key:
             print("❌ API密钥不能为空")
             return False
 
-        base_url = input(f"API地址 (回车使用默认 {self.ai_config['base_url']}): ").strip()
-        if not base_url:
-            base_url = self.ai_config['base_url']
+        # 选择API类型
+        print("\n选择API类型:")
+        print("1. 中转API (推荐，如ChatAI)")
+        print("2. 官方API (需要魔法上网)")
+        
+        api_type = input("请选择 (1-2): ").strip()
+        
+        if api_type == "1":
+            base_url = input("API地址 (回车使用 https://www.chataiapi.com/v1): ").strip()
+            if not base_url:
+                base_url = "https://www.chataiapi.com/v1"
+            model = input("模型名称 (回车使用 deepseek-r1): ").strip()
+            if not model:
+                model = "deepseek-r1"
+                
+            config = {
+                'enabled': True,
+                'provider': 'chataiapi',
+                'base_url': base_url,
+                'api_key': api_key,
+                'model': model,
+                'api_type': 'openai_compatible'
+            }
+        elif api_type == "2":
+            print("⚠️ 官方API需要魔法上网，建议选择中转API")
+            model = input("模型名称 (如 gemini-2.5-flash): ").strip()
+            if not model:
+                model = "gemini-2.5-flash"
+                
+            config = {
+                'enabled': True,
+                'provider': 'official',
+                'base_url': None,
+                'api_key': api_key,
+                'model': model,
+                'api_type': 'gemini_official'
+            }
+        else:
+            print("❌ 无效选择")
+            return False
 
-        # 测试API连接
+        # 测试连接
         print("🔍 测试API连接...")
-        config = {
-            'enabled': True,
-            'base_url': base_url,
-            'api_key': api_key,
-            'model': selected_model
-        }
-
         if self.test_ai_connection(config):
             self.ai_config = config
             self.save_ai_config(config)
@@ -123,54 +163,79 @@ class AIClipperSystem:
             return False
 
     def call_ai_api(self, prompt: str, system_prompt: str = "你是专业的电视剧剧情分析师") -> Optional[str]:
-        """调用AI API"""
+        """调用AI API - 支持官方和中转API"""
         if not self.ai_config.get('enabled'):
             return None
 
         try:
-            payload = {
-                "model": self.ai_config['model'],
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": system_prompt
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "max_tokens": 2000,
-                "temperature": 0.7
-            }
-
-            url = self.ai_config['base_url'] + "/chat/completions"
-            headers = {
-                'Accept': 'application/json',
-                'Authorization': f'Bearer {self.ai_config["api_key"]}',
-                'User-Agent': 'TV-Clipper/1.0.0',
-                'Content-Type': 'application/json'
-            }
-
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
-
-            if response.status_code == 200:
-                data = response.json()
-
-                # 处理deepseek-r1的特殊格式
-                if self.ai_config['model'] == 'deepseek-r1':
-                    message = data['choices'][0]['message']
-                    if hasattr(message, 'reasoning_content'):
-                        print(f"🧠 AI思考过程: {message.reasoning_content[:100]}...")
-                    return message.get('content', '')
-                else:
-                    return data['choices'][0]['message']['content']
-            else:
-                print(f"⚠ API调用失败: {response.status_code}")
-                return None
-
+            # 使用通用配置助手调用
+            from api_config_helper import config_helper
+            full_prompt = f"{system_prompt}\n\n{prompt}"
+            return config_helper.call_ai_api(full_prompt, self.ai_config)
+            
+        except ImportError:
+            # 备用调用方法
+            return self.call_ai_api_fallback(prompt, system_prompt)
         except Exception as e:
             print(f"⚠ AI调用异常: {e}")
+            return None
+
+    def call_ai_api_fallback(self, prompt: str, system_prompt: str) -> Optional[str]:
+        """备用AI调用方法"""
+        try:
+            # Gemini官方API
+            if self.ai_config.get('api_type') == 'gemini_official':
+                try:
+                    from google import genai
+                    client = genai.Client(api_key=self.ai_config['api_key'])
+                    full_prompt = f"{system_prompt}\n\n{prompt}"
+                    response = client.models.generate_content(
+                        model=self.ai_config['model'], 
+                        contents=full_prompt
+                    )
+                    return response.text
+                except ImportError:
+                    print("❌ 缺少google-genai库")
+                    return None
+            
+            # OpenAI兼容API (中转)
+            else:
+                payload = {
+                    "model": self.ai_config['model'],
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 2000,
+                    "temperature": 0.7
+                }
+
+                url = self.ai_config['base_url'] + "/chat/completions"
+                headers = {
+                    'Accept': 'application/json',
+                    'Authorization': f'Bearer {self.ai_config["api_key"]}',
+                    'User-Agent': 'TV-Clipper/1.0.0',
+                    'Content-Type': 'application/json'
+                }
+
+                response = requests.post(url, headers=headers, json=payload, timeout=30)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    # 处理deepseek-r1的特殊格式
+                    if self.ai_config['model'] == 'deepseek-r1':
+                        message = data['choices'][0]['message']
+                        if 'reasoning_content' in message:
+                            print(f"🧠 AI思考过程: {message['reasoning_content'][:100]}...")
+                        return message.get('content', '')
+                    else:
+                        return data['choices'][0]['message']['content']
+                else:
+                    print(f"⚠ API调用失败: {response.status_code}")
+                    return None
+
+        except Exception as e:
+            print(f"⚠ 备用AI调用异常: {e}")
             return None
 
     def parse_subtitle_file(self, filepath: str) -> List[Dict]:

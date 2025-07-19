@@ -19,8 +19,55 @@ class UniversalAPIHelper:
 
         # 预定义的服务商配置模板
         self.service_templates = {
+            # 官方API
+            'gemini_official': {
+                'name': 'Google Gemini 官方API',
+                'base_url': None,  # 官方API不需要base_url
+                'api_type': 'gemini_official',
+                'models': [
+                    'gemini-2.5-flash',
+                    'gemini-2.5-pro',
+                    'gemini-1.5-pro',
+                    'gemini-1.5-flash'
+                ],
+                'default_model': 'gemini-2.5-flash',
+                'headers': {},
+                'rank': 1,
+                'is_official': True
+            },
+            'openai_official': {
+                'name': 'OpenAI 官方API',
+                'base_url': 'https://api.openai.com/v1',
+                'api_type': 'openai_official',
+                'models': [
+                    'gpt-4o',
+                    'gpt-4o-mini',
+                    'gpt-4-turbo',
+                    'gpt-3.5-turbo'
+                ],
+                'default_model': 'gpt-4o-mini',
+                'headers': {},
+                'rank': 2,
+                'is_official': True
+            },
+            'deepseek_official': {
+                'name': 'DeepSeek 官方API',
+                'base_url': 'https://api.deepseek.com/v1',
+                'api_type': 'openai_compatible',
+                'models': [
+                    'deepseek-r1',
+                    'deepseek-v3',
+                    'deepseek-chat',
+                    'deepseek-reasoner'
+                ],
+                'default_model': 'deepseek-r1',
+                'headers': {},
+                'rank': 3,
+                'is_official': True
+            },
+            # 中转API
             'chataiapi': {
-                'name': 'ChatAI API (推荐 - 支持多模型)',
+                'name': 'ChatAI API (中转 - 推荐)',
                 'base_url': 'https://www.chataiapi.com/v1',
                 'api_type': 'openai_compatible',
                 'models': [
@@ -32,10 +79,11 @@ class UniversalAPIHelper:
                 ],
                 'default_model': 'deepseek-r1',
                 'headers': {},
-                'rank': 1
+                'rank': 4,
+                'is_official': False
             },
             'suanli': {
-                'name': '算力云 (Suanli)',
+                'name': '算力云 (中转)',
                 'base_url': 'https://api.suanli.cn/v1',
                 'api_type': 'openai_compatible', 
                 'models': [
@@ -47,10 +95,11 @@ class UniversalAPIHelper:
                 ],
                 'default_model': 'deepseek-ai/DeepSeek-R1',
                 'headers': {},
-                'rank': 2
+                'rank': 5,
+                'is_official': False
             },
             'openrouter': {
-                'name': 'OpenRouter (多模型支持)',
+                'name': 'OpenRouter (中转)',
                 'base_url': 'https://openrouter.ai/api/v1',
                 'api_type': 'openai_compatible',
                 'models': [
@@ -65,21 +114,8 @@ class UniversalAPIHelper:
                     'HTTP-Referer': 'https://replit.com',
                     'X-Title': 'TV-Clipper-AI'
                 },
-                'rank': 3
-            },
-            'deepseek_direct': {
-                'name': 'DeepSeek 官方API',
-                'base_url': 'https://api.deepseek.com/v1',
-                'api_type': 'openai_compatible',
-                'models': [
-                    'deepseek-r1',
-                    'deepseek-v3',
-                    'deepseek-chat',
-                    'deepseek-reasoner'
-                ],
-                'default_model': 'deepseek-r1',
-                'headers': {},
-                'rank': 4
+                'rank': 6,
+                'is_official': False
             },
             'custom': {
                 'name': '自定义API服务商',
@@ -94,26 +130,92 @@ class UniversalAPIHelper:
 
     def interactive_setup(self) -> Dict[str, Any]:
         """交互式配置API"""
-        print("🤖 通用AI分析配置 - 支持多种中转服务商")
+        print("🤖 AI分析配置 - 支持官方API和中转服务商")
         print("=" * 60)
 
-        # 显示推荐服务商
-        print("🎯 推荐的中转服务商（按推荐程度排序）：")
-        sorted_services = sorted(
-            self.service_templates.items(),
-            key=lambda x: x[1]['rank']
-        )
+        # 先让用户选择官方还是中转
+        print("请选择API类型:")
+        print("1. 🏢 官方API (直连，需要魔法上网)")
+        print("2. 🌐 中转API (国内可访问，推荐)")
+        print("3. 🔧 自定义配置")
+        print("0. 跳过AI配置（使用基础分析）")
 
+        choice = input("\n请选择 (0-3): ").strip()
+        
+        if choice == "0":
+            return {'enabled': False, 'provider': 'none'}
+        elif choice == "1":
+            return self._setup_official_apis()
+        elif choice == "2":
+            return self._setup_proxy_apis()
+        elif choice == "3":
+            return self._configure_custom_service()
+        else:
+            print("❌ 无效选择，请重试")
+            return self.interactive_setup()
+
+    def _setup_official_apis(self) -> Dict[str, Any]:
+        """配置官方API"""
+        print("\n🏢 官方API配置")
+        print("=" * 40)
+        print("注意：官方API需要魔法上网，但响应速度快、稳定性高")
+        print()
+
+        # 显示官方API服务商
+        official_services = {k: v for k, v in self.service_templates.items() 
+                           if v.get('is_official', False)}
+        
+        sorted_services = sorted(official_services.items(), key=lambda x: x[1]['rank'])
+        
         for i, (key, info) in enumerate(sorted_services, 1):
-            if key == 'custom':
-                continue
+            print(f"{i}. {info['name']}")
+            print(f"   • 推荐模型: {info['default_model']}")
+            if info['api_type'] == 'gemini_official':
+                print(f"   • 特点: 无需base_url，直接使用官方SDK")
+            print()
+        
+        while True:
+            try:
+                choice = input(f"选择服务商 (1-{len(sorted_services)}): ").strip()
+                choice = int(choice)
+                if 1 <= choice <= len(sorted_services):
+                    service_key = list(sorted_services.keys())[choice - 1]
+                    return self._configure_service(service_key)
+                else:
+                    print("❌ 无效选择")
+            except ValueError:
+                print("❌ 请输入数字")
+
+    def _setup_proxy_apis(self) -> Dict[str, Any]:
+        """配置中转API"""
+        print("\n🌐 中转API配置")
+        print("=" * 40)
+        print("中转API优势：国内可访问，无需魔法上网，支持多种模型")
+        print()
+
+        # 显示中转API服务商
+        proxy_services = {k: v for k, v in self.service_templates.items() 
+                         if not v.get('is_official', True)}
+        
+        sorted_services = sorted(proxy_services.items(), key=lambda x: x[1]['rank'])
+        
+        for i, (key, info) in enumerate(sorted_services, 1):
             print(f"{i}. {info['name']}")
             print(f"   • 地址: {info['base_url']}")
             print(f"   • 推荐模型: {info['default_model']}")
             print()
-
-        print(f"{len(sorted_services)}. 手动配置自定义服务商")
-        print("0. 跳过AI配置（使用基础分析）")
+        
+        while True:
+            try:
+                choice = input(f"选择服务商 (1-{len(sorted_services)}): ").strip()
+                choice = int(choice)
+                if 1 <= choice <= len(sorted_services):
+                    service_key = list(sorted_services.keys())[choice - 1]
+                    return self._configure_service(service_key)
+                else:
+                    print("❌ 无效选择")
+            except ValueError:
+                print("❌ 请输入数字")
 
         while True:
             try:
@@ -268,6 +370,9 @@ class UniversalAPIHelper:
         """测试OpenAI兼容API"""
         try:
             print(f"📡 正在测试连接...")
+            if config.get('api_type') == 'gemini_official':
+                return self._test_gemini_official_api(config)
+            
             print(f"   API地址: {config['base_url']}")
             print(f"   模型: {config['model']}")
             print(f"   密钥前缀: {config['api_key'][:10]}...")
@@ -371,6 +476,10 @@ class UniversalAPIHelper:
     def _call_openai_compatible_api(self, prompt: str, config: Dict[str, Any]) -> Optional[str]:
         """调用OpenAI兼容API"""
         try:
+            # Gemini官方API特殊处理
+            if config.get('api_type') == 'gemini_official':
+                return self._call_gemini_official_api(prompt, config)
+            
             client = OpenAI(
                 base_url=config['base_url'],
                 api_key=config['api_key']
@@ -399,6 +508,56 @@ class UniversalAPIHelper:
 
         except Exception as e:
             print(f"OpenAI兼容API调用失败: {e}")
+            return None
+
+    def _test_gemini_official_api(self, config: Dict[str, Any]) -> bool:
+        """测试Gemini官方API"""
+        try:
+            print(f"   使用Gemini官方API")
+            print(f"   模型: {config['model']}")
+            print(f"   密钥前缀: {config['api_key'][:10]}...")
+            
+            # 使用官方google-genai库
+            try:
+                from google import genai
+            except ImportError:
+                print("❌ 缺少google-genai库，请安装: pip install google-genai")
+                return False
+            
+            client = genai.Client(api_key=config['api_key'])
+            response = client.models.generate_content(
+                model=config['model'], 
+                contents="hello"
+            )
+            
+            print(f"✅ Gemini API响应成功: {response.text[:20]}...")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Gemini官方API测试失败: {e}")
+            return False
+
+    def _call_gemini_official_api(self, prompt: str, config: Dict[str, Any]) -> Optional[str]:
+        """调用Gemini官方API"""
+        try:
+            from google import genai
+            
+            client = genai.Client(api_key=config['api_key'])
+            
+            # 构建完整的提示
+            full_prompt = f"""你是专业的电视剧剧情分析师，专注于识别精彩片段并制定最佳剪辑方案。
+
+{prompt}"""
+            
+            response = client.models.generate_content(
+                model=config['model'],
+                contents=full_prompt
+            )
+            
+            return response.text
+            
+        except Exception as e:
+            print(f"Gemini官方API调用失败: {e}")
             return None
 
     def _call_custom_api(self, prompt: str, config: Dict[str, Any]) -> Optional[str]:
