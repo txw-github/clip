@@ -341,7 +341,11 @@ class UniversalAPIHelper:
     def _test_api_connection(self, config: Dict[str, Any]) -> bool:
         """测试API连接"""
         try:
-            if config.get('api_type') == 'openai_compatible':
+            api_type = config.get('api_type', 'openai_compatible')
+            
+            if api_type == 'gemini_official':
+                return self._test_gemini_official_api(config)
+            elif api_type == 'openai_compatible':
                 return self._test_openai_compatible_api(config)
             else:
                 return self._test_custom_api(config)
@@ -352,10 +356,11 @@ class UniversalAPIHelper:
     def _test_openai_compatible_api(self, config: Dict[str, Any]) -> bool:
         """测试OpenAI兼容API"""
         try:
-            print(f"📡 正在测试连接...")
+            # Gemini官方API需要特殊处理
             if config.get('api_type') == 'gemini_official':
                 return self._test_gemini_official_api(config)
             
+            print(f"📡 正在测试OpenAI兼容API连接...")
             print(f"   API地址: {config['base_url']}")
             print(f"   模型: {config['model']}")
             print(f"   密钥前缀: {config['api_key'][:10]}...")
