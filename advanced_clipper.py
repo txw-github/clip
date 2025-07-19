@@ -376,11 +376,53 @@ class AdvancedIntelligentClipper:
         }
 
     def call_ai_api(self, prompt: str) -> Optional[str]:
-        """调用AI API"""
+        """调用AI API - 区分官方和中转API"""
         try:
             if not self.config.get('enabled') or not self.config.get('api_key'):
                 return None
             
+            api_type = self.config.get('api_type', 'openai_compatible')
+            
+            # Gemini官方API特殊处理
+            if api_type == 'gemini_official':
+                return self._call_gemini_official(prompt)
+            
+            # OpenAI官方API和中转API使用OpenAI兼容格式
+            return self._call_openai_compatible(prompt)
+                
+        except Exception as e:
+            print(f"⚠ AI调用异常: {e}")
+            return None
+
+    def _call_gemini_official(self, prompt: str) -> Optional[str]:
+        """调用Gemini官方API"""
+        try:
+            from google import genai
+            
+            client = genai.Client(api_key=self.config['api_key'])
+            
+            # 构建完整提示
+            full_prompt = f"""你是专业的影视剪辑师和剧情分析专家，擅长识别精彩片段并提供专业解说。
+
+{prompt}"""
+            
+            response = client.models.generate_content(
+                model=self.config['model'],
+                contents=full_prompt
+            )
+            
+            return response.text
+            
+        except ImportError:
+            print("❌ 缺少google-genai库，请运行: pip install google-genai")
+            return None
+        except Exception as e:
+            print(f"⚠ Gemini官方API调用失败: {e}")
+            return None
+
+    def _call_openai_compatible(self, prompt: str) -> Optional[str]:
+        """调用OpenAI兼容API（官方OpenAI和各种中转）"""
+        try:
             payload = {
                 "model": self.config.get('model', 'gpt-3.5-turbo'),
                 "messages": [
@@ -403,19 +445,30 @@ class AdvancedIntelligentClipper:
                 'Content-Type': 'application/json'
             }
             
-            url = self.config.get('base_url', 'https://api.openai.com/v1') + "/chat/completions"
+            # 添加额外头部（用于某些中转服务）
+            headers.update(self.config.get('extra_headers', {}))
+            
+            base_url = self.config.get('base_url', 'https://api.openai.com/v1')
+            url = base_url.rstrip('/') + "/chat/completions"
             
             response = requests.post(url, headers=headers, json=payload, timeout=60)
             
             if response.status_code == 200:
                 data = response.json()
-                return data['choices'][0]['message']['content']
+                message = data['choices'][0]['message']
+                
+                # 处理DeepSeek-R1的特殊输出格式
+                if hasattr(message, 'reasoning_content'):
+                    return message.get('content', '')
+                else:
+                    return message.get('content', '')
             else:
                 print(f"⚠ API调用失败: {response.status_code}")
+                print(f"   错误详情: {response.text[:200]}")
                 return None
                 
         except Exception as e:
-            print(f"⚠ AI调用异常: {e}")
+            print(f"⚠ OpenAI兼容API调用失败: {e}")
             return None
 
     def find_matching_video(self, episode_file: str) -> Optional[str]:
