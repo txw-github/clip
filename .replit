@@ -5,7 +5,7 @@ run = "python main.py"
 channel = "stable-24_05"
 
 [workflows]
-runButton = "运行智能剪辑系统"
+runButton = "故事线聚焦剪辑系统"
 
 [[workflows.workflow]]
 name = "运行智能剪辑系统"
@@ -19,6 +19,15 @@ args = "python setup_directories.py"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python start_ai_clipper.py"
+
+[[workflows.workflow]]
+name = "故事线聚焦剪辑系统"
+author = 45271521
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python start_story_clipper.py"
 
 [deployment]
 run = ["sh", "-c", "python main.py"]
