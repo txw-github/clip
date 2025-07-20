@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -272,12 +273,18 @@ class IntelligentTVClipper:
                 end = response.find("```", start)
                 json_str = response[start:end].strip()
             else:
-                json_str = response.strip()
+                # 寻找第一个 { 到最后一个 }
+                start = response.find("{")
+                end = response.rfind("}") + 1
+                if start >= 0 and end > start:
+                    json_str = response[start:end]
+                else:
+                    json_str = response.strip()
 
             return json.loads(json_str)
         except json.JSONDecodeError as e:
             print(f"❌ JSON解析错误: {e}")
-            print(f"原始响应: {response}")
+            print(f"原始响应: {response[:200]}...")
             return None
         except Exception as e:
             print(f"❌ 解析AI响应出错: {e}")
@@ -297,9 +304,9 @@ class IntelligentTVClipper:
         closest_end = None
 
         for sub in subtitles:
-            if abs(sub['start_seconds'] - start_seconds) <= 10:
+            if abs(sub['start_seconds'] - start_seconds) <= 30:  # 放宽到30秒
                 closest_start = sub
-            if abs(sub['end_seconds'] - end_seconds) <= 10:
+            if abs(sub['end_seconds'] - end_seconds) <= 30:
                 closest_end = sub
 
         # 如果找到，则更新时间
@@ -310,9 +317,10 @@ class IntelligentTVClipper:
             segment['end_time'] = closest_end['end']
             end_seconds = closest_end['end_seconds']
 
-        # 验证时间顺序
-        if start_seconds >= end_seconds:
-            print(f"⚠️ 时间段无效: {start_time} --> {end_time}")
+        # 验证时间顺序和长度
+        duration = end_seconds - start_seconds
+        if start_seconds >= end_seconds or duration < 60 or duration > 300:  # 1-5分钟
+            print(f"⚠️ 时间段无效: {start_time} --> {end_time} (时长: {duration:.1f}秒)")
             return False
 
         return True
@@ -320,31 +328,63 @@ class IntelligentTVClipper:
     def _time_to_seconds(self, time_str: str) -> float:
         """时间字符串转秒数"""
         try:
-            time_obj = datetime.strptime(time_str, '%H:%M:%S,%f')
-            return time_obj.hour * 3600 + time_obj.minute * 60 + time_obj.second + time_obj.microsecond / 1000000.0
-        except ValueError:
-            time_obj = datetime.strptime(time_str, '%H:%M:%S,%f')
-            return time_obj.hour * 3600 + time_obj.minute * 60 + time_obj.second + time_obj.microsecond / 1000000.0
+            # 标准化时间格式
+            time_str = time_str.replace(',', '.')
+            
+            # 解析 HH:MM:SS.mmm 格式
+            parts = time_str.split(':')
+            if len(parts) == 3:
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                seconds_parts = parts[2].split('.')
+                seconds = int(seconds_parts[0])
+                milliseconds = int(seconds_parts[1]) if len(seconds_parts) > 1 else 0
+                
+                return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000.0
+            return 0.0
+        except Exception as e:
+            print(f"⚠️ 时间解析错误: {time_str} - {e}")
+            return 0.0
 
     def _safe_filename(self, title: str) -> str:
         """创建安全的文件名"""
-        safe_title = re.sub(r'[^\w\s]', '', title)
+        safe_title = re.sub(r'[^\w\s\u4e00-\u9fff]', '', title)
         safe_title = safe_title.replace(' ', '_')
         return safe_title[:60]  # 限制长度
 
     def _find_video_file(self, episode_name: str) -> Optional[str]:
         """查找对应的视频文件"""
+        base_name = os.path.splitext(episode_name)[0]
+        
+        # 支持的视频格式
+        video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv']
+        
+        # 精确匹配
+        for ext in video_extensions:
+            video_path = os.path.join(self.video_folder, base_name + ext)
+            if os.path.exists(video_path):
+                return video_path
+        
+        # 模糊匹配
         for filename in os.listdir(self.video_folder):
-            if episode_name in filename and filename.lower().endswith(('.mp4', '.avi', '.mkv')):
-                return os.path.join(self.video_folder, filename)
+            if any(filename.lower().endswith(ext) for ext in video_extensions):
+                if base_name.lower() in filename.lower() or filename.lower() in base_name.lower():
+                    return os.path.join(self.video_folder, filename)
+        
         return None
 
     def _extract_episode_number(self, episode_name: str) -> str:
         """提取剧集号码"""
-        match = re.search(r'第(\d+)集', episode_name)
-        if match:
-            return match.group(1)
-        return "未知集数"
+        patterns = [
+            r'[Ee](\d+)', r'EP(\d+)', r'第(\d+)集', r'S\d+E(\d+)', r'(\d+)'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, episode_name, re.I)
+            if match:
+                return f"E{match.group(1).zfill(2)}"
+        
+        return os.path.splitext(episode_name)[0]
 
     def _clip_video_segment(self, video_file: str, segment: Dict, output_path: str) -> bool:
         """剪辑视频片段"""
@@ -353,28 +393,54 @@ class IntelligentTVClipper:
 
         try:
             # 计算持续时间
-            start_seconds = self._time_to_seconds(start_time.replace('.', ','))
-            end_seconds = self._time_to_seconds(end_time.replace('.', ','))
+            start_seconds = self._time_to_seconds(start_time)
+            end_seconds = self._time_to_seconds(end_time)
             duration = end_seconds - start_seconds
+
+            print(f"   ⏱️ 时间: {start_time} --> {end_time} (时长: {duration:.1f}秒)")
+
+            # 检查ffmpeg
+            try:
+                result = subprocess.run(['ffmpeg', '-version'], capture_output=True, timeout=5)
+                if result.returncode != 0:
+                    print(f"   ❌ ffmpeg不可用")
+                    return False
+            except:
+                print(f"   ❌ ffmpeg未安装")
+                return False
 
             # 构建ffmpeg命令
             cmd = [
                 'ffmpeg',
+                '-hide_banner', '-loglevel', 'error',
                 '-i', video_file,
-                '-ss', start_time,
+                '-ss', str(start_seconds),
                 '-t', str(duration),
-                '-c', 'copy',  # 使用copy避免重新编码
-                output_path
+                '-c:v', 'libx264', '-c:a', 'aac',
+                '-preset', 'fast', '-crf', '23',
+                '-avoid_negative_ts', 'make_zero',
+                '-y', output_path
             ]
 
             # 执行命令
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            print(f"   ✅ 剪辑命令: {' '.join(cmd)}")
-            print(f"   ✅ 剪辑输出: {result.stderr}")  # ffmpeg输出到stderr
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
-            return True
-        except subprocess.CalledProcessError as e:
-            print(f"   ❌ 剪辑失败: {e.stderr}")
+            if result.returncode == 0 and os.path.exists(output_path):
+                file_size = os.path.getsize(output_path) / (1024*1024)
+                if file_size > 0.5:  # 至少500KB
+                    print(f"   ✅ 剪辑成功: {file_size:.1f}MB")
+                    return True
+                else:
+                    print(f"   ❌ 文件太小: {file_size:.1f}MB")
+                    if os.path.exists(output_path):
+                        os.remove(output_path)
+                    return False
+            else:
+                print(f"   ❌ 剪辑失败: {result.stderr}")
+                return False
+
+        except subprocess.TimeoutExpired:
+            print(f"   ❌ 剪辑超时")
             return False
         except Exception as e:
             print(f"   ❌ 剪辑出错: {e}")
@@ -384,7 +450,7 @@ class IntelligentTVClipper:
         """创建剪辑片段并生成旁白 - 一体化流程"""
         print(f"\n🎬 开始剪辑并生成旁白...")
 
-        episode_name = os.path.splitext(os.path.basename(srt_file))[0]
+        episode_name = os.path.basename(srt_file)
         video_file = self._find_video_file(episode_name)
 
         if not video_file:
@@ -400,11 +466,12 @@ class IntelligentTVClipper:
 
             # 生成输出文件名
             safe_title = self._safe_filename(segment['title'])
-            clip_filename = f"{episode_name}_{safe_title}.mp4"
+            episode_num = self._extract_episode_number(episode_name)
+            clip_filename = f"{episode_num}_{safe_title}.mp4"
             clip_path = os.path.join(self.output_folder, clip_filename)
 
             # 旁白文件路径
-            narration_filename = f"{episode_name}_{safe_title}_旁白.txt"
+            narration_filename = f"{episode_num}_{safe_title}_旁白.txt"
             narration_path = os.path.join(self.narration_folder, narration_filename)
 
             # 检查是否已存在完整的剪辑和旁白
@@ -414,7 +481,6 @@ class IntelligentTVClipper:
                 continue
 
             # 剪辑视频
-            print(f"   ⏱️ 时间: {segment['start_time']} --> {segment['end_time']}")
             if self._clip_video_segment(video_file, segment, clip_path):
                 print(f"   ✅ 视频剪辑完成")
 
@@ -435,31 +501,34 @@ class IntelligentTVClipper:
 
     def _save_narration_file(self, narration_path: str, segment: Dict, narration: Dict):
         """保存旁白文件"""
-        with open(narration_path, 'w', encoding='utf-8') as f:
-            f.write(f"片段标题: {segment['title']}\n")
-            f.write(f"时间段: {segment['start_time']} --> {segment['end_time']}\n")
-            f.write(f"剧情重要性: {segment['plot_significance']}\n")
-            f.write(f"戏剧张力: {segment.get('dramatic_tension', 'N/A')}\n")
-            f.write(f"情感冲击: {segment.get('emotional_impact', 'N/A')}\n\n")
+        try:
+            with open(narration_path, 'w', encoding='utf-8') as f:
+                f.write(f"片段标题: {segment['title']}\n")
+                f.write(f"时间段: {segment['start_time']} --> {segment['end_time']}\n")
+                f.write(f"剧情重要性: {segment['plot_significance']}\n")
+                f.write(f"戏剧张力: {segment.get('dramatic_tension', 'N/A')}\n")
+                f.write(f"情感冲击: {segment.get('emotional_impact', 'N/A')}\n\n")
 
-            f.write("=== 旁白内容 ===\n")
-            f.write(f"开场白: {narration['opening']}\n")
-            f.write(f"过程解说: {narration['process']}\n")
-            f.write(f"亮点强调: {narration['highlight']}\n")
-            f.write(f"结尾: {narration['ending']}\n\n")
+                f.write("=== 旁白内容 ===\n")
+                f.write(f"开场白: {narration['opening']}\n")
+                f.write(f"过程解说: {narration['process']}\n")
+                f.write(f"亮点强调: {narration['highlight']}\n")
+                f.write(f"结尾: {narration['ending']}\n\n")
 
-            f.write("=== 完整旁白 ===\n")
-            f.write(f"{narration['full_narration']}\n\n")
+                f.write("=== 完整旁白 ===\n")
+                f.write(f"{narration['full_narration']}\n\n")
 
-            if 'timing' in narration:
-                f.write("=== 时间安排 ===\n")
-                for section, timing in narration['timing'].items():
-                    f.write(f"{section}: {timing[0]}-{timing[1]}秒\n")
+                if 'timing' in narration:
+                    f.write("=== 时间安排 ===\n")
+                    for section, timing in narration['timing'].items():
+                        f.write(f"{section}: {timing[0]}-{timing[1]}秒\n")
 
-            if 'key_dialogues' in segment:
-                f.write("\n=== 关键台词 ===\n")
-                for dialogue in segment['key_dialogues']:
-                    f.write(f"[{dialogue['timestamp']}] {dialogue['speaker']}: {dialogue['line']}\n")
+                if 'key_dialogues' in segment:
+                    f.write("\n=== 关键台词 ===\n")
+                    for dialogue in segment['key_dialogues']:
+                        f.write(f"[{dialogue['timestamp']}] {dialogue['speaker']}: {dialogue['line']}\n")
+        except Exception as e:
+            print(f"   ⚠️ 旁白文件保存失败: {e}")
 
     def _generate_segment_narration(self, segment: Dict, analysis: Dict) -> Dict:
         """为片段生成专业旁白"""
@@ -529,6 +598,26 @@ class IntelligentTVClipper:
         # 降级到模板生成
         return self._generate_template_narration(segment)
 
+    def _parse_narration_response(self, response: str) -> Optional[Dict]:
+        """解析旁白响应"""
+        try:
+            if "```json" in response:
+                start = response.find("```json") + 7
+                end = response.find("```", start)
+                json_str = response[start:end].strip()
+            else:
+                start = response.find("{")
+                end = response.rfind("}") + 1
+                if start >= 0 and end > start:
+                    json_str = response[start:end]
+                else:
+                    json_str = response.strip()
+
+            return json.loads(json_str)
+        except Exception as e:
+            print(f"   ⚠️ 旁白解析失败: {e}")
+            return None
+
     def _generate_template_narration(self, segment: Dict) -> Dict:
         """使用模板生成基础旁白"""
         title = segment['title']
@@ -566,3 +655,150 @@ class IntelligentTVClipper:
                 "ending": [11, 12]
             }
         }
+
+    def process_single_episode(self, srt_file: str) -> bool:
+        """处理单集"""
+        print(f"\n📺 处理: {os.path.basename(srt_file)}")
+
+        # 1. 解析字幕
+        subtitles = self.parse_subtitle_file(srt_file)
+        if not subtitles:
+            print(f"❌ 字幕解析失败")
+            return False
+
+        # 2. 检查缓存
+        analysis = self.load_cached_analysis(srt_file)
+        if not analysis:
+            # 3. AI分析
+            analysis = self.ai_analyze_full_episode(subtitles, os.path.basename(srt_file))
+            if not analysis:
+                print(f"❌ AI分析失败")
+                return False
+
+            # 4. 保存缓存
+            self.save_analysis_cache(srt_file, analysis)
+
+        # 5. 创建片段和旁白
+        success = self.create_clip_with_narration(analysis, srt_file)
+
+        if success:
+            print(f"✅ {os.path.basename(srt_file)} 处理完成")
+        else:
+            print(f"❌ {os.path.basename(srt_file)} 处理失败")
+
+        return success
+
+    def process_all_episodes(self):
+        """处理所有集数"""
+        print("\n🚀 开始批量处理")
+        print("=" * 60)
+
+        # 检查字幕文件
+        srt_files = []
+        for filename in os.listdir(self.srt_folder):
+            if filename.endswith(('.srt', '.txt')) and not filename.startswith('.'):
+                srt_files.append(os.path.join(self.srt_folder, filename))
+
+        if not srt_files:
+            print(f"❌ {self.srt_folder}/ 目录中未找到字幕文件")
+            return
+
+        srt_files.sort()  # 按文件名排序
+        
+        print(f"📄 找到 {len(srt_files)} 个字幕文件")
+
+        if not unified_config.is_enabled():
+            print(f"❌ 请先配置AI接口")
+            return
+
+        total_success = 0
+
+        for srt_file in srt_files:
+            try:
+                if self.process_single_episode(srt_file):
+                    total_success += 1
+            except Exception as e:
+                print(f"❌ 处理 {os.path.basename(srt_file)} 出错: {e}")
+
+        # 统计结果
+        final_clips = len([f for f in os.listdir(self.output_folder) if f.endswith('.mp4')])
+        final_narrations = len([f for f in os.listdir(self.narration_folder) if f.endswith('.txt')])
+
+        print(f"\n📊 处理完成:")
+        print(f"✅ 成功处理: {total_success}/{len(srt_files)} 集")
+        print(f"🎬 生成片段: {final_clips} 个")
+        print(f"🎙️ 生成旁白: {final_narrations} 个")
+
+    def show_menu(self):
+        """显示主菜单"""
+        while True:
+            print("\n" + "=" * 60)
+            print("🎬 完整智能电视剧剪辑系统")
+            print("=" * 60)
+
+            # 显示状态
+            config_status = "🤖 已配置" if unified_config.is_enabled() else "❌ 未配置"
+            print(f"AI状态: {config_status}")
+
+            # 检查文件
+            srt_files = len([f for f in os.listdir(self.srt_folder) if f.endswith(('.srt', '.txt'))])
+            video_files = len([f for f in os.listdir(self.video_folder) if f.lower().endswith(('.mp4', '.mkv', '.avi'))])
+            
+            print(f"字幕文件: {srt_files} 个")
+            print(f"视频文件: {video_files} 个")
+
+            print("\n请选择操作:")
+            print("1. 🎬 开始智能剪辑")
+            print("2. 🤖 配置AI接口")
+            print("3. 📁 检查文件状态")
+            print("4. ❌ 退出")
+
+            try:
+                choice = input("\n请输入选择 (1-4): ").strip()
+
+                if choice == '1':
+                    if not unified_config.is_enabled():
+                        print(f"\n❌ 请先配置AI接口")
+                        continue
+                    if srt_files == 0 or video_files == 0:
+                        print(f"\n❌ 请检查文件是否准备完整")
+                        continue
+
+                    self.process_all_episodes()
+
+                elif choice == '2':
+                    unified_config.interactive_setup()
+
+                elif choice == '3':
+                    print(f"\n📊 文件状态详情:")
+                    print(f"• 字幕目录: {self.srt_folder}/ ({srt_files} 个文件)")
+                    print(f"• 视频目录: {self.video_folder}/ ({video_files} 个文件)")
+                    print(f"• 输出目录: {self.output_folder}/")
+                    print(f"• 旁白目录: {self.narration_folder}/")
+                    print(f"• 缓存目录: {self.cache_folder}/")
+
+                elif choice == '4':
+                    print("\n👋 感谢使用！")
+                    break
+
+                else:
+                    print("❌ 无效选择")
+
+            except KeyboardInterrupt:
+                print("\n\n👋 用户中断")
+                break
+            except Exception as e:
+                print(f"❌ 操作错误: {e}")
+
+def main():
+    """主函数"""
+    try:
+        clipper = IntelligentTVClipper()
+        clipper.show_menu()
+    except KeyboardInterrupt:
+        print("\n\n👋 程序被用户中断")
+    except Exception as e:
+        print(f"❌ 系统错误: {e}")
+
+if __name__ == "__main__":
+    main()
