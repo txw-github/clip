@@ -20,7 +20,7 @@ class UniversalAPIHelper:
 
         # 预定义的服务商配置模板
         self.service_templates = {
-            # 官方API
+            # 官方API - 需要魔法上网
             'gemini_official': {
                 'name': 'Google Gemini 官方API',
                 'base_url': None,  # 官方API不需要base_url
@@ -39,7 +39,7 @@ class UniversalAPIHelper:
             'openai_official': {
                 'name': 'OpenAI 官方API',
                 'base_url': 'https://api.openai.com/v1',
-                'api_type': 'openai_official',
+                'api_type': 'openai_compatible',
                 'models': [
                     'gpt-4o',
                     'gpt-4o-mini',
@@ -66,7 +66,7 @@ class UniversalAPIHelper:
                 'rank': 3,
                 'is_official': True
             },
-            # 中转API
+            # 中转API - 国内可访问
             'chataiapi': {
                 'name': 'ChatAI API (中转 - 推荐)',
                 'base_url': 'https://www.chataiapi.com/v1',
@@ -125,7 +125,8 @@ class UniversalAPIHelper:
                 'models': ['custom-model'],
                 'default_model': 'custom-model',
                 'headers': {},
-                'rank': 99
+                'rank': 99,
+                'is_official': False
             }
         }
 
@@ -162,7 +163,7 @@ class UniversalAPIHelper:
         print("注意：官方API需要魔法上网，但响应速度快、稳定性高")
         print()
 
-        # 显示官方API服务商
+        # 显示官方API服务商 - 正确筛选官方API
         official_services = {k: v for k, v in self.service_templates.items() 
                            if v.get('is_official', False)}
         
@@ -173,6 +174,10 @@ class UniversalAPIHelper:
             print(f"   • 推荐模型: {info['default_model']}")
             if info['api_type'] == 'gemini_official':
                 print(f"   • 特点: 无需base_url，直接使用官方SDK")
+            elif 'openai.com' in info.get('base_url', ''):
+                print(f"   • 特点: OpenAI官方API，需要科学上网")
+            elif 'deepseek.com' in info.get('base_url', ''):
+                print(f"   • 特点: DeepSeek官方API，需要科学上网")
             print()
         
         while True:
@@ -180,7 +185,7 @@ class UniversalAPIHelper:
                 choice = input(f"选择服务商 (1-{len(sorted_services)}): ").strip()
                 choice = int(choice)
                 if 1 <= choice <= len(sorted_services):
-                    service_key = sorted_services[choice - 1][0]  # 修复这里的错误
+                    service_key = list(sorted_services)[choice - 1]
                     return self._configure_service(service_key)
                 else:
                     print("❌ 无效选择")
@@ -194,9 +199,9 @@ class UniversalAPIHelper:
         print("中转API优势：国内可访问，无需魔法上网，支持多种模型")
         print()
 
-        # 显示中转API服务商
+        # 显示中转API服务商 - 正确筛选中转API
         proxy_services = {k: v for k, v in self.service_templates.items() 
-                         if not v.get('is_official', True)}
+                         if not v.get('is_official', False)}
         
         sorted_services = sorted(proxy_services.items(), key=lambda x: x[1]['rank'])
         
@@ -204,6 +209,12 @@ class UniversalAPIHelper:
             print(f"{i}. {info['name']}")
             print(f"   • 地址: {info['base_url']}")
             print(f"   • 推荐模型: {info['default_model']}")
+            if 'chataiapi.com' in info.get('base_url', ''):
+                print(f"   • 特点: 国内稳定，支持多种模型")
+            elif 'suanli.cn' in info.get('base_url', ''):
+                print(f"   • 特点: 算力云中转，价格实惠")
+            elif 'openrouter.ai' in info.get('base_url', ''):
+                print(f"   • 特点: 有免费模型可用")
             print()
         
         while True:
@@ -211,7 +222,7 @@ class UniversalAPIHelper:
                 choice = input(f"选择服务商 (1-{len(sorted_services)}): ").strip()
                 choice = int(choice)
                 if 1 <= choice <= len(sorted_services):
-                    service_key = sorted_services[choice - 1][0]  # 修复这里的错误
+                    service_key = list(sorted_services)[choice - 1]
                     return self._configure_service(service_key)
                 else:
                     print("❌ 无效选择")
