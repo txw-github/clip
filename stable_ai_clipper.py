@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -28,7 +27,7 @@ class StableAIClipper:
         self.videos_folder = "videos"
         self.output_folder = "stable_clips"
         self.cache_folder = "analysis_cache"
-        
+
         # 创建必要目录
         for folder in [self.srt_folder, self.videos_folder, self.output_folder, self.cache_folder]:
             if not os.path.exists(folder):
@@ -127,36 +126,17 @@ class StableAIClipper:
             return []
 
     def build_smart_context(self, subtitles: List[Dict]) -> str:
-        """构建智能上下文 - 根据字幕数量动态调整"""
+        """构建智能上下文 - 全文分析"""
         if not subtitles:
             return ""
-        
-        total_count = len(subtitles)
-        
-        # 动态确定采样数量，最少50条，最多300条
-        if total_count <= 100:
-            sample_count = min(total_count, 50)
-        elif total_count <= 500:
-            sample_count = min(total_count // 2, 150)
-        else:
-            sample_count = 300
-        
-        # 均匀采样
-        step = max(1, total_count // sample_count)
-        sampled_subtitles = []
-        
-        for i in range(0, total_count, step):
-            if len(sampled_subtitles) >= sample_count:
-                break
-            sampled_subtitles.append(subtitles[i])
-        
-        # 构建上下文
+
+        # 构建完整上下文，保留所有对话的连贯性
         context_parts = []
-        for sub in sampled_subtitles:
+        for sub in subtitles:
             context_parts.append(f"[{sub['start']}] {sub['text']}")
-        
+
         context = '\n'.join(context_parts)
-        print(f"📝 构建上下文: 总计{total_count}条字幕，采样{len(sampled_subtitles)}条")
+        print(f"📝 构建完整上下文: 总计{len(subtitles)}条字幕")
         return context
 
     def ai_analyze_episode(self, subtitles: List[Dict], srt_file: str) -> Optional[Dict]:
@@ -167,7 +147,7 @@ class StableAIClipper:
 
         episode_num = self.extract_episode_number(srt_file)
         context = self.build_smart_context(subtitles)
-        
+
         prompt = f"""你是专业的电视剧剪辑师。请分析这一集的内容，识别出2-3个最精彩的片段用于短视频制作。
 
 【集数】第{episode_num}集
@@ -225,7 +205,7 @@ class StableAIClipper:
                 json_text = response[start:end]
 
             analysis = json.loads(json_text)
-            
+
             # 验证时间段
             validated_clips = []
             for clip in analysis.get('clips', []):
@@ -248,17 +228,17 @@ class StableAIClipper:
         try:
             start_time = clip.get('start_time', '')
             end_time = clip.get('end_time', '')
-            
+
             if not start_time or not end_time:
                 return False
 
             start_seconds = self.time_to_seconds(start_time)
             end_seconds = self.time_to_seconds(end_time)
-            
+
             # 检查时间顺序
             if start_seconds >= end_seconds:
                 return False
-            
+
             # 检查时间段长度
             duration = end_seconds - start_seconds
             if duration < 30 or duration > 300:  # 30秒到5分钟
@@ -268,7 +248,7 @@ class StableAIClipper:
             if subtitles:
                 subtitle_start = subtitles[0]['start_seconds']
                 subtitle_end = subtitles[-1]['end_seconds']
-                
+
                 if start_seconds < subtitle_start or end_seconds > subtitle_end:
                     return False
 
@@ -282,7 +262,7 @@ class StableAIClipper:
         """调用AI API"""
         try:
             import requests
-            
+
             if self.config.get('api_type') == 'official':
                 if self.config.get('model_provider') == 'gemini':
                     return self._call_gemini_api(prompt)
@@ -290,7 +270,7 @@ class StableAIClipper:
                     return self._call_official_api(prompt)
             else:
                 return self._call_proxy_api(prompt)
-                
+
         except Exception as e:
             print(f"❌ API调用异常: {e}")
             return None
@@ -299,7 +279,7 @@ class StableAIClipper:
         """调用中转API"""
         try:
             import requests
-            
+
             payload = {
                 "model": self.config['model'],
                 "messages": [
@@ -316,7 +296,7 @@ class StableAIClipper:
             }
 
             url = self.config['base_url'].rstrip('/') + "/chat/completions"
-            
+
             response = requests.post(url, headers=headers, json=payload, timeout=60)
 
             if response.status_code == 200:
@@ -353,7 +333,7 @@ class StableAIClipper:
         """调用其他官方API"""
         try:
             import requests
-            
+
             payload = {
                 "model": self.config['model'],
                 "messages": [
@@ -370,7 +350,7 @@ class StableAIClipper:
             }
 
             url = self.config.get('base_url', 'https://api.openai.com/v1').rstrip('/') + "/chat/completions"
-            
+
             response = requests.post(url, headers=headers, json=payload, timeout=60)
 
             if response.status_code == 200:
@@ -489,7 +469,7 @@ class StableAIClipper:
 
         # 检查缓存的分析结果
         cached_analysis = self.load_cached_analysis(srt_file)
-        
+
         if cached_analysis:
             analysis = cached_analysis
         else:
@@ -509,7 +489,7 @@ class StableAIClipper:
 
             # 添加集数信息
             analysis['episode_number'] = self.extract_episode_number(srt_file)
-            
+
             # 保存分析结果
             self.save_analysis_cache(srt_file, analysis)
 
@@ -623,13 +603,13 @@ class StableAIClipper:
 
         # 获取所有SRT文件
         srt_files = []
-        
+
         # 检查当前目录
         for file in os.listdir('.'):
             if file.endswith('.srt') or file.endswith('.txt'):
                 if any(char.isdigit() for char in file):  # 包含数字的文件
                     srt_files.append(file)
-        
+
         # 检查srt目录
         if os.path.exists(self.srt_folder):
             for file in os.listdir(self.srt_folder):

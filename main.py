@@ -171,17 +171,8 @@ class UnifiedTVClipper:
 
     def _ai_analyze(self, subtitles: List[Dict], episode_num: str) -> Optional[Dict]:
         """AI智能分析"""
-        # 构建上下文
-        total_subs = len(subtitles)
-        sample_size = min(300, total_subs)
-
-        if total_subs > sample_size:
-            step = total_subs // sample_size
-            sampled_subtitles = [subtitles[i] for i in range(0, total_subs, step)][:sample_size]
-        else:
-            sampled_subtitles = subtitles
-
-        context = ' '.join([sub['text'] for sub in sampled_subtitles])
+        # 构建完整上下文 - 全文输入保证分析准确性
+        context = ' '.join([sub['text'] for sub in subtitles])
 
         # 构建提示词
         prompt = f"""分析电视剧剧集内容，为{episode_num}创建3个2-3分钟的精彩短视频。
