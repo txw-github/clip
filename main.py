@@ -120,7 +120,7 @@ class UnifiedTVClipper:
             'enabled': True,
             'provider': 'proxy',
             'api_key': api_key,
-            'base_url': base_url,
+            'url': base_url,  # 使用原始的url字段
             'model': model
         }
         
@@ -146,7 +146,7 @@ class UnifiedTVClipper:
             'enabled': True,
             'provider': 'openai',
             'api_key': api_key,
-            'base_url': 'https://api.openai.com/v1',
+            'url': 'https://api.openai.com/v1',  # 使用原始的url字段
             'model': 'gpt-3.5-turbo'
         }
         
@@ -163,11 +163,11 @@ class UnifiedTVClipper:
         """配置自定义API"""
         print("\n📝 配置自定义API")
         
-        base_url = input("API地址: ").strip()
+        url = input("API地址: ").strip()
         api_key = input("API密钥: ").strip()
         model = input("模型名称: ").strip()
         
-        if not all([base_url, api_key, model]):
+        if not all([url, api_key, model]):
             print("❌ 所有字段都不能为空")
             return False
         
@@ -175,7 +175,7 @@ class UnifiedTVClipper:
             'enabled': True,
             'provider': 'custom',
             'api_key': api_key,
-            'base_url': base_url,
+            'url': url,  # 使用原始的url字段
             'model': model
         }
         
@@ -206,8 +206,9 @@ class UnifiedTVClipper:
                 'max_tokens': 10
             }
             
+            url = config.get('url', config.get('base_url', ''))
             response = requests.post(
-                f"{config['base_url']}/chat/completions",
+                f"{url}/chat/completions",
                 headers=headers,
                 json=data,
                 timeout=10
@@ -428,57 +429,7 @@ class UnifiedTVClipper:
         return '\n\n'.join(context_parts)
 
     def _call_ai_api(self, prompt: str) -> Optional[str]:
-        """调用AI API - 区分官方和中转"""
-        provider = self.ai_config.get('provider', 'proxy')
-        
-        if provider == 'openai':
-            return self._call_openai_official(prompt)
-        elif provider in ['proxy', 'custom']:
-            return self._call_proxy_api(prompt)
-        else:
-            print(f"⚠️ 未知的API提供商: {provider}")
-            return None
-
-    def _call_openai_official(self, prompt: str) -> Optional[str]:
-        """调用OpenAI官方API"""
-        try:
-            headers = {
-                'Authorization': f'Bearer {self.ai_config["api_key"]}',
-                'Content-Type': 'application/json',
-                'User-Agent': 'TV-Clipper/1.0'
-            }
-            
-            data = {
-                'model': self.ai_config.get('model', 'gpt-3.5-turbo'),
-                'messages': [
-                    {'role': 'system', 'content': '你是专业的电视剧剪辑师，擅长识别精彩片段和保持剧情连贯性。'},
-                    {'role': 'user', 'content': prompt}
-                ],
-                'max_tokens': 4000,
-                'temperature': 0.7
-            }
-            
-            print("🤖 调用OpenAI官方API...")
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                return result.get('choices', [{}])[0].get('message', {}).get('content', '')
-            else:
-                print(f"⚠️ OpenAI官方API调用失败: {response.status_code}")
-                
-        except Exception as e:
-            print(f"⚠️ OpenAI官方API异常: {e}")
-        
-        return None
-
-    def _call_proxy_api(self, prompt: str) -> Optional[str]:
-        """调用中转API"""
+        """调用AI API - 统一的原始方式"""
         try:
             headers = {
                 'Authorization': f'Bearer {self.ai_config["api_key"]}',
@@ -492,15 +443,16 @@ class UnifiedTVClipper:
                     {'role': 'user', 'content': prompt}
                 ],
                 'max_tokens': 4000,
-                'temperature': 0.7,
-                'stream': False
+                'temperature': 0.7
             }
             
-            base_url = self.ai_config.get('base_url', 'https://api.chatanywhere.tech/v1')
-            print(f"🔗 调用中转API: {base_url}")
+            # 获取API地址 - 兼容url和base_url两种配置
+            api_url = self.ai_config.get('url', self.ai_config.get('base_url', ''))
+            
+            print(f"🤖 调用AI API: {api_url}")
             
             response = requests.post(
-                f"{base_url}/chat/completions",
+                f"{api_url}/chat/completions",
                 headers=headers,
                 json=data,
                 timeout=60
@@ -510,10 +462,10 @@ class UnifiedTVClipper:
                 result = response.json()
                 return result.get('choices', [{}])[0].get('message', {}).get('content', '')
             else:
-                print(f"⚠️ 中转API调用失败: {response.status_code} - {response.text[:200]}")
+                print(f"⚠️ API调用失败: {response.status_code} - {response.text[:200]}")
                 
         except Exception as e:
-            print(f"⚠️ 中转API异常: {e}")
+            print(f"⚠️ API调用异常: {e}")
         
         return None
 
