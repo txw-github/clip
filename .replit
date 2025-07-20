@@ -94,3 +94,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python start_core_clipping.py"
+
+[[workflows.workflow]]
+name = "增强版智能剪辑系统"
+author = 45270989
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python start_enhanced_intelligent_system.py"
