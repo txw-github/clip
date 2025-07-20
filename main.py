@@ -435,19 +435,8 @@ def main():
 if __name__ == "__main__":
     main()
 
-# 实际导入必要的模块
-try:
-    from subtitle_analyzer import SubtitleAnalyzer
-except ImportError:
-    print("⚠️ 字幕分析器模块未找到，将使用基础功能")
-    
-    class SubtitleAnalyzer:
-        def __init__(self, ai_config):
-            self.ai_config = ai_config
-        
-        def analyze_episode(self, file_path):
-            # 基础字幕分析实现
-            return {'clips': []}
+# 导入字幕分析器
+from subtitle_analyzer import SubtitleAnalyzer
 
 try:
     from video_clipper import VideoClipper

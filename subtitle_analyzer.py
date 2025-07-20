@@ -1,9 +1,8 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
-智能字幕分析器 - 多剧情类型自适应分析
+智能字幕分析器 - 确保剧情连贯性和反转关联
 """
 
 import os
@@ -12,6 +11,490 @@ import json
 import requests
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime
+
+class SubtitleAnalyzer:
+    """智能字幕分析器 - 专注于剧情连贯性"""
+
+    def __init__(self, ai_config: Dict):
+        self.ai_config = ai_config
+        self.enabled = ai_config.get('enabled', False) if ai_config else False
+
+        # 剧情连贯性关键词
+        self.plot_continuity_keywords = {
+            '前情回顾': ['之前', '刚才', '当时', '那时候', '上次', '早些时候'],
+            '情节推进': ['接着', '然后', '随后', '后来', '接下来', '现在'],
+            '反转铺垫': ['但是', '然而', '不过', '其实', '原来', '没想到'],
+            '重要揭露': ['真相', '秘密', '发现', '证据', '线索', '关键'],
+            '情感转折': ['突然', '忽然', '意外', '震惊', '惊讶', '没料到'],
+            '角色发展': ['决定', '选择', '改变', '成长', '觉悟', '明白']
+        }
+
+        # 反转情节标识
+        self.plot_twist_indicators = [
+            '原来', '其实', '没想到', '竟然', '居然', '事实上',
+            '真相是', '实际上', '不是', '而是', '反而', '相反'
+        ]
+
+        # 剧情关联词
+        self.story_connection_words = [
+            '因为', '所以', '导致', '结果', '引起', '造成',
+            '由于', '基于', '根据', '按照', '依据', '考虑到'
+        ]
+
+        # 错别字修正
+        self.corrections = {
+            '防衛': '防卫', '正當': '正当', '証據': '证据', '檢察官': '检察官',
+            '發現': '发现', '設計': '设计', '開始': '开始', '結束': '结束',
+            '問題': '问题', '機會': '机会', '決定': '决定', '選擇': '选择'
+        }
+
+    def parse_subtitle_file(self, filepath: str) -> List[Dict]:
+        """解析字幕文件并修正错别字"""
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+
+            # 修正错别字
+            for old, new in self.corrections.items():
+                content = content.replace(old, new)
+
+            # 解析字幕格式
+            blocks = re.split(r'\n\s*\n', content.strip())
+            subtitles = []
+
+            for block in blocks:
+                lines = block.strip().split('\n')
+                if len(lines) >= 3:
+                    try:
+                        index = int(lines[0])
+                        time_match = re.match(r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})', lines[1])
+                        if time_match:
+                            start_time = time_match.group(1)
+                            end_time = time_match.group(2)
+                            text = '\n'.join(lines[2:]).strip()
+
+                            subtitles.append({
+                                'index': index,
+                                'start': start_time,
+                                'end': end_time,
+                                'text': text,
+                                'start_seconds': self._time_to_seconds(start_time),
+                                'end_seconds': self._time_to_seconds(end_time)
+                            })
+                    except (ValueError, IndexError):
+                        continue
+
+            return subtitles
+
+        except Exception as e:
+            print(f"  解析字幕文件失败: {e}")
+            return []
+
+    def _time_to_seconds(self, time_str: str) -> float:
+        """时间字符串转秒数"""
+        try:
+            h, m, s_ms = time_str.split(':')
+            s, ms = s_ms.split(',')
+            return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+        except:
+            return 0.0
+
+    def analyze_episode(self, file_path: str) -> Dict:
+        """分析单集，确保剧情连贯性"""
+        filename = os.path.basename(file_path)
+        print(f"🔍 分析文件: {filename}")
+
+        # 检查缓存
+        cache_name = os.path.splitext(filename)[0] + '.json'
+        cache_path = os.path.join('analysis_cache', cache_name)
+
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, 'r', encoding='utf-8') as f:
+                    cached_result = json.load(f)
+                print(f"✅ 使用缓存结果")
+                return cached_result
+            except:
+                print(f"⚠️ 缓存文件损坏，重新分析")
+
+        # 解析字幕
+        subtitles = self.parse_subtitle_file(file_path)
+        if not subtitles:
+            return {'clips': [], 'episode': filename}
+
+        print(f"  📄 解析完成: {len(subtitles)} 条字幕")
+
+        # 智能片段分析
+        clips = self._analyze_coherent_clips(subtitles, filename)
+
+        # 构建结果
+        result = {
+            'episode': filename,
+            'clips': clips,
+            'total_clips': len(clips),
+            'analysis_time': datetime.now().isoformat(),
+            'continuity_analysis': self._analyze_story_continuity(clips),
+            'plot_connections': self._find_plot_connections(clips)
+        }
+
+        # 保存缓存
+        try:
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            print(f"💾 结果已缓存")
+        except Exception as e:
+            print(f"⚠️ 缓存保存失败: {e}")
+
+        return result
+
+    def _analyze_coherent_clips(self, subtitles: List[Dict], filename: str) -> List[Dict]:
+        """分析连贯的剧情片段"""
+        clips = []
+
+        # 计算字幕重要性评分
+        scored_subtitles = []
+        for i, subtitle in enumerate(subtitles):
+            score = self._calculate_importance_score(subtitle['text'], i, len(subtitles))
+            if score >= 3.0:  # 重要度阈值
+                scored_subtitles.append({
+                    'index': i,
+                    'subtitle': subtitle,
+                    'score': score
+                })
+
+        # 按评分排序
+        scored_subtitles.sort(key=lambda x: x['score'], reverse=True)
+
+        # 智能合并连贯片段
+        used_indices = set()
+
+        for scored_sub in scored_subtitles[:5]:  # 最多5个核心片段
+            center_index = scored_sub['index']
+
+            if center_index in used_indices:
+                continue
+
+            # 寻找连贯的片段范围
+            clip_range = self._find_coherent_range(subtitles, center_index)
+            start_idx, end_idx = clip_range
+
+            # 检查时长合理性
+            duration = subtitles[end_idx]['end_seconds'] - subtitles[start_idx]['start_seconds']
+            if 60 <= duration <= 180:  # 1-3分钟
+
+                clip = {
+                    'start_time': subtitles[start_idx]['start'],
+                    'end_time': subtitles[end_idx]['end'],
+                    'duration': duration,
+                    'score': scored_sub['score'],
+                    'description': self._generate_clip_description(subtitles, start_idx, end_idx),
+                    'theme': self._extract_clip_theme(subtitles, start_idx, end_idx),
+                    'key_dialogues': self._extract_key_dialogues(subtitles, start_idx, end_idx),
+                    'plot_significance': self._analyze_plot_significance(subtitles, start_idx, end_idx),
+                    'continuity_markers': self._find_continuity_markers(subtitles, start_idx, end_idx),
+                    'twist_potential': self._detect_twist_potential(subtitles, start_idx, end_idx)
+                }
+
+                clips.append(clip)
+
+                # 标记已使用的索引
+                for idx in range(start_idx, end_idx + 1):
+                    used_indices.add(idx)
+
+        # 按时间排序，确保故事顺序
+        clips.sort(key=lambda x: self._time_to_seconds(x['start_time']))
+
+        return clips
+
+    def _calculate_importance_score(self, text: str, position: int, total: int) -> float:
+        """计算字幕重要性评分"""
+        score = 0.0
+
+        # 基础长度评分
+        if 10 <= len(text) <= 100:
+            score += 1.0
+
+        # 剧情连贯性评分
+        for category, keywords in self.plot_continuity_keywords.items():
+            for keyword in keywords:
+                if keyword in text:
+                    if category == '重要揭露':
+                        score += 3.0
+                    elif category == '反转铺垫':
+                        score += 2.5
+                    elif category == '情节推进':
+                        score += 2.0
+                    else:
+                        score += 1.5
+
+        # 反转情节评分
+        for twist_word in self.plot_twist_indicators:
+            if twist_word in text:
+                score += 3.0
+
+        # 情感强度评分
+        emotion_indicators = ['！', '？', '...', '啊', '哦', '哇', '天哪']
+        for indicator in emotion_indicators:
+            score += text.count(indicator) * 0.5
+
+        # 位置权重
+        position_ratio = position / total
+        if 0.2 <= position_ratio <= 0.8:  # 中间部分更重要
+            score *= 1.2
+
+        return score
+
+    def _find_coherent_range(self, subtitles: List[Dict], center_index: int) -> Tuple[int, int]:
+        """寻找连贯的片段范围"""
+        start_idx = center_index
+        end_idx = center_index
+
+        # 向前扩展
+        for i in range(center_index - 1, max(0, center_index - 20), -1):
+            if self._is_scene_break(subtitles[i]['text'], subtitles[i + 1]['text']):
+                break
+            start_idx = i
+
+        # 向后扩展
+        for i in range(center_index + 1, min(len(subtitles), center_index + 20)):
+            if self._is_scene_break(subtitles[i - 1]['text'], subtitles[i]['text']):
+                break
+            end_idx = i
+
+        return start_idx, end_idx
+
+    def _is_scene_break(self, prev_text: str, current_text: str) -> bool:
+        """判断是否为场景切换"""
+        scene_break_indicators = [
+            '镜头切换', '场景转换', '同时', '另一边', '此时',
+            '画面一转', '转眼间', '突然间'
+        ]
+
+        for indicator in scene_break_indicators:
+            if indicator in current_text:
+                return True
+
+        # 文本长度差异过大
+        if abs(len(prev_text) - len(current_text)) > 50:
+            return True
+
+        return False
+
+    def _generate_clip_description(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> str:
+        """生成片段描述"""
+        key_texts = []
+        for i in range(start_idx, min(end_idx + 1, start_idx + 3)):
+            text = subtitles[i]['text']
+            if len(text) > 10:
+                key_texts.append(text[:30] + "..." if len(text) > 30 else text)
+
+        return " | ".join(key_texts) if key_texts else "精彩片段"
+
+    def _extract_clip_theme(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> str:
+        """提取片段主题"""
+        full_text = " ".join([subtitles[i]['text'] for i in range(start_idx, end_idx + 1)])
+
+        # 主题关键词检测
+        themes = {
+            '法律争议': ['法庭', '审判', '律师', '检察官', '证据', '辩护'],
+            '案件调查': ['调查', '线索', '真相', '破案', '疑犯', '案件'],
+            '情感冲突': ['愤怒', '痛苦', '悲伤', '争吵', '分歧', '矛盾'],
+            '真相揭露': ['发现', '真相', '秘密', '原来', '其实', '没想到'],
+            '角色成长': ['决定', '选择', '改变', '成长', '觉悟', '坚持']
+        }
+
+        theme_scores = {}
+        for theme, keywords in themes.items():
+            score = sum(1 for keyword in keywords if keyword in full_text)
+            if score > 0:
+                theme_scores[theme] = score
+
+        if theme_scores:
+            return max(theme_scores, key=theme_scores.get)
+
+        return "剧情发展"
+
+    def _extract_key_dialogues(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> List[str]:
+        """提取关键对话"""
+        key_dialogues = []
+
+        for i in range(start_idx, end_idx + 1):
+            text = subtitles[i]['text']
+            start_time = subtitles[i]['start']
+            end_time = subtitles[i]['end']
+
+            # 判断是否为关键对话
+            is_key = False
+            if any(word in text for word in self.plot_twist_indicators):
+                is_key = True
+            elif any(word in text for word in ['真相', '证据', '发现', '秘密']):
+                is_key = True
+            elif '!' in text or '？' in text:
+                is_key = True
+
+            if is_key and len(text) > 5:
+                key_dialogues.append(f"[{start_time} --> {end_time}] {text}")
+
+        return key_dialogues[:5]  # 最多5条关键对话
+
+    def _analyze_plot_significance(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> str:
+        """分析剧情意义"""
+        full_text = " ".join([subtitles[i]['text'] for i in range(start_idx, end_idx + 1)])
+
+        significance_points = []
+
+        # 检测剧情发展类型
+        if any(word in full_text for word in ['证据', '线索', '发现']):
+            significance_points.append("重要证据披露")
+
+        if any(word in full_text for word in ['决定', '选择', '改变']):
+            significance_points.append("角色发展转折")
+
+        if any(word in full_text for word in self.plot_twist_indicators):
+            significance_points.append("剧情反转关键")
+
+        if any(word in full_text for word in ['冲突', '争论', '对抗']):
+            significance_points.append("戏剧冲突高潮")
+
+        if any(word in full_text for word in ['真相', '秘密', '揭露']):
+            significance_points.append("真相揭示时刻")
+
+        return "、".join(significance_points) if significance_points else "重要剧情节点"
+
+    def _find_continuity_markers(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> List[str]:
+        """寻找连贯性标记"""
+        markers = []
+        full_text = " ".join([subtitles[i]['text'] for i in range(start_idx, end_idx + 1)])
+
+        for category, keywords in self.plot_continuity_keywords.items():
+            for keyword in keywords:
+                if keyword in full_text:
+                    markers.append(f"{category}:{keyword}")
+
+        return markers
+
+    def _detect_twist_potential(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> float:
+        """检测反转潜力"""
+        full_text = " ".join([subtitles[i]['text'] for i in range(start_idx, end_idx + 1)])
+
+        twist_score = 0.0
+        for twist_word in self.plot_twist_indicators:
+            twist_score += full_text.count(twist_word) * 1.0
+
+        # 归一化到0-1
+        return min(twist_score / 5.0, 1.0)
+
+    def _analyze_story_continuity(self, clips: List[Dict]) -> Dict:
+        """分析故事连贯性"""
+        if not clips:
+            return {'continuity_score': 0, 'connections': []}
+
+        connections = []
+        total_score = 0
+
+        for i in range(len(clips) - 1):
+            current_clip = clips[i]
+            next_clip = clips[i + 1]
+
+            # 分析片段间的连接强度
+            connection_strength = self._calculate_connection_strength(current_clip, next_clip)
+            total_score += connection_strength
+
+            connections.append({
+                'from_clip': i,
+                'to_clip': i + 1,
+                'strength': connection_strength,
+                'connection_type': self._identify_connection_type(current_clip, next_clip)
+            })
+
+        avg_score = total_score / len(connections) if connections else 0
+
+        return {
+            'continuity_score': avg_score,
+            'connections': connections,
+            'overall_coherence': 'high' if avg_score > 0.7 else 'medium' if avg_score > 0.4 else 'low'
+        }
+
+    def _calculate_connection_strength(self, clip1: Dict, clip2: Dict) -> float:
+        """计算片段间连接强度"""
+        strength = 0.0
+
+        # 主题连续性
+        if clip1['theme'] == clip2['theme']:
+            strength += 0.3
+
+        # 时间间隔
+        time1 = self._time_to_seconds(clip1['end_time'])
+        time2 = self._time_to_seconds(clip2['start_time'])
+        time_gap = time2 - time1
+
+        if time_gap < 300:  # 5分钟内
+            strength += 0.4
+        elif time_gap < 900:  # 15分钟内
+            strength += 0.2
+
+        # 反转关联
+        if clip1['twist_potential'] > 0.5 and clip2['twist_potential'] > 0.5:
+            strength += 0.3
+
+        return min(strength, 1.0)
+
+    def _identify_connection_type(self, clip1: Dict, clip2: Dict) -> str:
+        """识别连接类型"""
+        if '真相揭露' in clip1['plot_significance'] and '真相揭露' in clip2['plot_significance']:
+            return '真相递进'
+        elif '反转' in clip1['plot_significance'] or '反转' in clip2['plot_significance']:
+            return '情节反转'
+        elif clip1['theme'] == clip2['theme']:
+            return '主题延续'
+        else:
+            return '情节推进'
+
+    def _find_plot_connections(self, clips: List[Dict]) -> List[Dict]:
+        """寻找剧情关联点"""
+        connections = []
+
+        for i, clip in enumerate(clips):
+            # 寻找与其他片段的关联
+            for j, other_clip in enumerate(clips):
+                if i != j:
+                    connection = self._analyze_clip_connection(clip, other_clip, i, j)
+                    if connection:
+                        connections.append(connection)
+
+        return connections
+
+    def _analyze_clip_connection(self, clip1: Dict, clip2: Dict, idx1: int, idx2: int) -> Optional[Dict]:
+        """分析两个片段的关联"""
+        # 检查关键词重叠
+        desc1_words = set(clip1['description'].split())
+        desc2_words = set(clip2['description'].split())
+        common_words = desc1_words & desc2_words
+
+        if len(common_words) >= 2:  # 至少2个共同关键词
+            return {
+                'clip1_index': idx1,
+                'clip2_index': idx2,
+                'connection_type': 'keyword_overlap',
+                'common_elements': list(common_words),
+                'strength': len(common_words) / max(len(desc1_words), len(desc2_words))
+            }
+
+        # 检查反转关联
+        if clip1['twist_potential'] > 0.5 and clip2['twist_potential'] > 0.5:
+            return {
+                'clip1_index': idx1,
+                'clip2_index': idx2,
+                'connection_type': 'plot_twist_chain',
+                'common_elements': ['反转情节'],
+                'strength': (clip1['twist_potential'] + clip2['twist_potential']) / 2
+            }
+
+        return None
+
+# The following part of the code was in the original file,
+# but it's not present in the edited snippet. To ensure a complete
+# and working file, I'm adding it back based on the intention.
 from clip_rules import ClipRules
 
 # 平台兼容性修复
