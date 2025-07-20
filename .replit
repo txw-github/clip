@@ -4,7 +4,7 @@ modules = ["python-3.12"]
 channel = "stable-24_05"
 
 [workflows]
-runButton = "核心剧情剪辑系统"
+runButton = "运行智能剪辑系统"
 
 [[workflows.workflow]]
 name = "运行智能剪辑系统"
@@ -18,88 +18,3 @@ args = "python setup_directories.py"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python main.py"
-
-[[workflows.workflow]]
-name = "运行增强剪辑系统"
-author = 45250602
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python run_enhanced_system.py"
-
-[[workflows.workflow]]
-name = "运行清理版剪辑系统"
-author = 45250602
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python clean_start.py"
-
-[[workflows.workflow]]
-name = "运行稳定版剪辑系统"
-author = 45250602
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python stable_clipper.py"
-
-[[workflows.workflow]]
-name = "电视剧短视频剪辑"
-author = 45269356
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python start_tv_clipping.py"
-
-[[workflows.workflow]]
-name = "智能电视剧剪辑"
-author = 45269356
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python start_intelligent_clipper.py"
-
-[[workflows.workflow]]
-name = "智能剪辑系统"
-author = 45269356
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pip install -r requirements.txt"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python main.py"
-
-[[workflows.workflow]]
-name = "集成智能剪辑系统"
-author = 45269356
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python main.py"
-
-[[workflows.workflow]]
-name = "核心剧情剪辑系统"
-author = 45270989
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python start_core_clipping.py"
-
-[[workflows.workflow]]
-name = "增强版智能剪辑系统"
-author = 45270989
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python start_enhanced_intelligent_system.py"

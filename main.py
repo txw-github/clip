@@ -3,447 +3,834 @@
 
 """
 电视剧智能剪辑系统 - 主程序
-集成了智能API配置、剧情分析、视频剪辑等功能
+基于AI大模型的智能分析，适应各种剧情类型
 """
 
 import os
+import sys
 import json
-import glob
-from datetime import datetime
-from typing import Dict, Any, List, Optional
-from api_config_helper import config_helper
+import requests
+from typing import List, Dict, Optional
 
-class TVClipperMain:
-    """电视剧剪辑系统主程序"""
-
+class AIClipperSystem:
     def __init__(self):
-        self.ensure_directories()
-        self.ai_config = None
+        self.ai_config = self.load_ai_config()
+        self.supported_models = [
+            'claude-3-5-sonnet-20240620',
+            'deepseek-r1', 
+            'gemini-2.5-pro',
+            'gpt-4o',
+            'deepseek-chat'
+        ]
 
-    def ensure_directories(self):
-        """确保必要目录存在"""
-        directories = ['srt', 'videos', 'clips', 'analysis_cache']
-        for directory in directories:
-            os.makedirs(directory, exist_ok=True)
-
-    def run(self):
-        """主运行流程"""
-        print("🎬 电视剧智能剪辑系统")
-        print("=" * 60)
-        print("基于AI的智能剧情分析和精彩片段剪辑")
-        print()
-
-        # 1. 检查并配置AI
-        self.setup_ai()
-
-        # 2. 选择操作模式
-        while True:
-            print("\n📋 选择操作:")
-            print("1. 🔍 分析字幕文件")
-            print("2. ✂️  开始剪辑视频")
-            print("3. ⚙️  重新配置AI")
-            print("4. 📊 查看分析报告")
-            print("0. 退出")
-
-            choice = input("\n请选择 (0-4): ").strip()
-
-            if choice == "0":
-                print("👋 感谢使用！")
-                break
-            elif choice == "1":
-                self.analyze_subtitles()
-            elif choice == "2":
-                self.clip_videos()
-            elif choice == "3":
-                self.setup_ai(force_reconfig=True)
-            elif choice == "4":
-                self.show_analysis_reports()
-            else:
-                print("❌ 无效选择，请重试")
-
-    def setup_ai(self, force_reconfig: bool = False):
-        """设置AI配置"""
-        if not force_reconfig:
-            # 尝试加载现有配置
-            self.ai_config = config_helper.load_config()
-
-            if self.ai_config.get('enabled'):
-                print(f"✅ AI配置已加载")
-                print(f"   服务商: {self.ai_config.get('provider_name', '未知')}")
-                print(f"   模型: {self.ai_config.get('model', '未知')}")
-                return
-
-        print("\n🤖 AI配置")
-        print("-" * 30)
-        print("AI分析可以大幅提升剧情识别准确性")
-
-        use_ai = input("是否启用AI分析？(y/n): ").lower().strip()
-
-        if use_ai != 'y':
-            self.ai_config = {'enabled': False}
-            print("✅ 已禁用AI，将使用基础规则分析")
-            return
-
-        # 启动智能配置向导
-        self.ai_config = config_helper.interactive_setup()
-
-        if not self.ai_config.get('enabled'):
-            print("⚠️ AI配置失败，将使用基础规则分析")
-
-    def analyze_subtitles(self):
-        """分析字幕文件"""
-        # 查找字幕文件 - 支持.txt和.srt格式
-        srt_files = glob.glob("srt/*.srt") + glob.glob("srt/*.txt")
-
-        if not srt_files:
-            print("❌ 未找到字幕文件")
-            print("💡 请将字幕文件(.srt或.txt)放在 srt/ 目录下")
-            return
-
-        print(f"\n📄 找到 {len(srt_files)} 个字幕文件:")
-        
-        # 检查已分析的文件
-        analyzed_files = []
-        pending_files = []
-        
-        for file_path in srt_files:
-            filename = os.path.basename(file_path)
-            cache_name = os.path.splitext(filename)[0] + '.json'
-            cache_path = os.path.join('analysis_cache', cache_name)
-            
-            if os.path.exists(cache_path):
-                analyzed_files.append((file_path, True))
-                print(f"✅ {filename} (已分析)")
-            else:
-                pending_files.append((file_path, False))
-                print(f"⏳ {filename} (待分析)")
-
-        if analyzed_files:
-            print(f"\n📊 状态统计:")
-            print(f"   已分析: {len(analyzed_files)} 个文件")
-            print(f"   待分析: {len(pending_files)} 个文件")
-
-        print(f"\n📋 分析选项:")
-        print(f"1. 🔄 分析所有文件 (跳过已分析的)")
-        print(f"2. 🆕 重新分析所有文件 (覆盖已有结果)")
-        print(f"3. ⚡ 只分析未完成的文件")
-
-        while True:
+    def load_ai_config(self) -> Dict:
+        """加载AI配置"""
+        config_file = '.ai_config.json'
+        if os.path.exists(config_file):
             try:
-                choice = input(f"\n请选择分析模式 (1-3): ").strip()
-                choice = int(choice)
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except:
+                pass
 
-                if choice == 1:
-                    # 智能分析 - 跳过已分析的
-                    self._analyze_all_files_smart(srt_files, skip_analyzed=True)
-                    break
-                elif choice == 2:
-                    # 重新分析所有
-                    self._analyze_all_files_smart(srt_files, skip_analyzed=False)
-                    break
-                elif choice == 3:
-                    # 只分析待分析的
-                    if pending_files:
-                        self._analyze_all_files_smart([f[0] for f in pending_files], skip_analyzed=False)
-                    else:
-                        print("✅ 所有文件都已分析完成")
-                    break
-                else:
-                    print("❌ 无效选择")
-            except ValueError:
-                print("❌ 请输入数字")
-
-    def _analyze_single_file(self, file_path: str):
-        """分析单个字幕文件"""
-        #from subtitle_analyzer import SubtitleAnalyzer
-
-        print(f"\n🔍 分析文件: {os.path.basename(file_path)}")
-
-        analyzer = SubtitleAnalyzer(self.ai_config)
-        result = analyzer.analyze_episode(file_path)
-
-        if result and 'clips' in result:
-            print(f"✅ 分析完成，识别到 {len(result['clips'])} 个精彩片段")
-            self._show_analysis_summary(result)
-        else:
-            print("❌ 分析失败")
-
-    def _analyze_all_files_smart(self, srt_files: List[str], skip_analyzed: bool = True):
-        """智能批量分析所有字幕文件 - 保证一致性"""
-        print(f"\n🔍 开始智能批量分析 {len(srt_files)} 个文件...")
-        print(f"📋 模式: {'跳过已分析' if skip_analyzed else '重新分析所有'}")
-
-        analyzer = SubtitleAnalyzer(self.ai_config)
-        all_results = []
-        skipped_count = 0
-        success_count = 0
-        error_count = 0
-
-        for i, file_path in enumerate(srt_files, 1):
-            filename = os.path.basename(file_path)
-            cache_name = os.path.splitext(filename)[0] + '.json'
-            cache_path = os.path.join('analysis_cache', cache_name)
-
-            print(f"\n[{i}/{len(srt_files)}] 处理: {filename}")
-
-            # 检查是否已存在分析结果
-            if skip_analyzed and os.path.exists(cache_path):
-                try:
-                    with open(cache_path, 'r', encoding='utf-8') as f:
-                        cached_result = json.load(f)
-                    
-                    all_results.append(cached_result)
-                    skipped_count += 1
-                    print(f"⏩ 跳过已分析 (已有 {len(cached_result.get('clips', []))} 个片段)")
-                    continue
-                except Exception as e:
-                    print(f"⚠️ 缓存文件损坏，重新分析: {e}")
-
-            # 执行分析
-            try:
-                result = analyzer.analyze_episode(file_path)
-
-                if result and 'clips' in result:
-                    # 保存分析结果到缓存
-                    with open(cache_path, 'w', encoding='utf-8') as f:
-                        json.dump(result, f, ensure_ascii=False, indent=2)
-                    
-                    all_results.append(result)
-                    success_count += 1
-                    print(f"✅ 分析完成，识别到 {len(result.get('clips', []))} 个精彩片段")
-                    print(f"💾 结果已缓存到: {cache_name}")
-                else:
-                    error_count += 1
-                    print("❌ 分析失败 - 未识别到有效片段")
-
-            except Exception as e:
-                error_count += 1
-                print(f"❌ 分析出错: {e}")
-
-        # 统计结果
-        print(f"\n📊 批量分析完成:")
-        print(f"   总文件数: {len(srt_files)} 个")
-        print(f"   跳过已分析: {skipped_count} 个")
-        print(f"   新分析成功: {success_count} 个")
-        print(f"   分析失败: {error_count} 个")
-        
-        total_clips = sum(len(r.get('clips', [])) for r in all_results)
-        print(f"   总计精彩片段: {total_clips} 个")
-
-        if all_results:
-            self._generate_batch_summary(all_results)
-
-    def _generate_batch_summary(self, results: List[Dict]):
-        """生成批量分析汇总报告"""
-        summary_path = os.path.join('analysis_cache', 'batch_summary.json')
-        
-        summary = {
-            'timestamp': datetime.now().isoformat(),
-            'total_episodes': len(results),
-            'total_clips': sum(len(r.get('clips', [])) for r in results),
-            'episodes': []
+        return {
+            'enabled': False,
+            'base_url': 'https://www.chataiapi.com/v1',
+            'api_key': '',
+            'model': 'claude-3-5-sonnet-20240620'
         }
 
-        for result in results:
-            episode_info = {
-                'filename': result.get('episode', 'unknown'),
-                'clips_count': len(result.get('clips', [])),
-                'total_duration': sum(clip.get('duration', 0) for clip in result.get('clips', [])),
-                'theme': result.get('theme', 'unknown')
-            }
-            summary['episodes'].append(episode_info)
+    def save_ai_config(self, config: Dict):
+        """保存AI配置"""
+        with open('.ai_config.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
 
-        # 保存汇总
-        with open(summary_path, 'w', encoding='utf-8') as f:
-            json.dump(summary, f, ensure_ascii=False, indent=2)
-
-        print(f"📋 批量汇总已保存: analysis_cache/batch_summary.json")
-
-    def _show_analysis_summary(self, result: Dict[str, Any]):
-        """显示分析摘要"""
-        clips = result.get('clips', [])
-        if not clips:
-            return
-
-        print("\n📋 精彩片段摘要:")
-        for i, clip in enumerate(clips[:5], 1):  # 只显示前5个
-            print(f"{i}. {clip['start_time']} - {clip['end_time']}")
-            print(f"   主题: {clip.get('theme', '未知')}")
-            print(f"   评分: {clip.get('score', 0):.1f}")
-            if clip.get('description'):
-                print(f"   描述: {clip['description'][:50]}...")
-
-        if len(clips) > 5:
-            print(f"... 还有 {len(clips) - 5} 个片段")
-
-    def clip_videos(self):
-        """剪辑视频"""
-        # 检查是否有分析结果 (排除汇总文件)
-        cache_files = [f for f in glob.glob("analysis_cache/*.json") 
-                      if not f.endswith('batch_summary.json')]
-
-        if not cache_files:
-            print("❌ 未找到分析结果")
-            print("💡 请先分析字幕文件")
-            return
-
-        # 检查视频文件
-        video_files = glob.glob("videos/*.*")
-        video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv']
-        video_files = [f for f in video_files if any(f.lower().endswith(ext) for ext in video_extensions)]
-
-        if not video_files:
-            print("❌ 未找到视频文件")
-            print("💡 请将视频文件放在 videos/ 目录下")
-            return
-
-        print(f"\n📹 找到 {len(video_files)} 个视频文件")
-        print(f"📄 找到 {len(cache_files)} 个分析结果")
-
-        # 检查已剪辑的视频
-        clipped_files = glob.glob("clips/*.mp4")
-        already_clipped = set()
-        for clip_file in clipped_files:
-            # 从剪辑文件名提取原始集数
-            basename = os.path.basename(clip_file)
-            if basename.startswith('E') or 'S01E' in basename:
-                already_clipped.add(basename.split('_')[0])
-
-        print(f"✂️ 已剪辑: {len(already_clipped)} 个集数")
-
-        clipper = VideoClipper()
-        success_count = 0
-        skip_count = 0
-        error_count = 0
-
-        for cache_file in cache_files:
-            episode_name = os.path.splitext(os.path.basename(cache_file))[0]
-            
-            # 检查是否已剪辑
-            episode_prefix = episode_name.replace('_4K_60fps', '').replace('S01', '')
-            if any(episode_prefix in clipped for clipped in already_clipped):
-                print(f"\n⏩ 跳过已剪辑: {episode_name}")
-                skip_count += 1
-                continue
-
-            # 查找对应的视频文件
-            matching_video = self._find_matching_video(episode_name, video_files)
-
-            if matching_video:
-                print(f"\n✂️ 剪辑 {episode_name}")
-                try:
-                    if clipper.clip_episode(cache_file, matching_video):
-                        success_count += 1
-                        print(f"✅ 剪辑完成: {episode_name}")
-                    else:
-                        error_count += 1
-                        print(f"❌ 剪辑失败: {episode_name}")
-                except Exception as e:
-                    error_count += 1
-                    print(f"❌ 剪辑出错: {episode_name} - {e}")
-            else:
-                error_count += 1
-                print(f"⚠️ 未找到 {episode_name} 对应的视频文件")
-
-        print(f"\n📊 剪辑任务完成:")
-        print(f"   成功剪辑: {success_count} 个")
-        print(f"   跳过已有: {skip_count} 个") 
-        print(f"   失败/错误: {error_count} 个")
-
-    def _find_matching_video(self, episode_name: str, video_files: List[str]) -> Optional[str]:
-        """查找匹配的视频文件"""
-        episode_name_clean = episode_name.lower()
-
-        for video_file in video_files:
-            video_name = os.path.splitext(os.path.basename(video_file))[0].lower()
-
-            # 简单的名称匹配
-            if episode_name_clean in video_name or video_name in episode_name_clean:
-                return video_file
-
-        return None
-
-    def show_analysis_reports(self):
-        """显示分析报告"""
-        cache_files = glob.glob("analysis_cache/*.json")
-
-        if not cache_files:
-            print("❌ 未找到分析报告")
-            return
-
-        print(f"\n📊 分析报告总览 ({len(cache_files)} 个文件):")
+    def setup_ai_config(self):
+        """设置AI配置 - 使用通用配置助手"""
+        print("\n🤖 智能AI分析配置")
         print("=" * 50)
+        
+        try:
+            from api_config_helper import config_helper
+            config = config_helper.interactive_setup()
+            
+            if config.get('enabled'):
+                self.ai_config = config
+                print("✅ AI配置成功！")
+                return True
+            else:
+                print("⚠️ 跳过AI配置，将使用基础分析模式")
+                return False
+                
+        except ImportError:
+            print("❌ 配置助手模块未找到，使用简化配置")
+            return self.setup_simple_ai_config()
+        except Exception as e:
+            print(f"❌ 配置过程出错: {e}")
+            return False
 
-        total_clips = 0
-        total_duration = 0
+    def setup_simple_ai_config(self):
+        """简化的AI配置（备用方案）"""
+        print("\n📝 简化AI配置")
+        print("=" * 30)
+        
+        api_key = input("输入API密钥: ").strip()
+        if not api_key:
+            print("❌ API密钥不能为空")
+            return False
 
-        for cache_file in cache_files:
+        # 选择API类型
+        print("\n选择API类型:")
+        print("1. 中转API (推荐，如ChatAI)")
+        print("2. 官方API (需要魔法上网)")
+        
+        api_type = input("请选择 (1-2): ").strip()
+        
+        if api_type == "1":
+            base_url = input("API地址 (回车使用 https://www.chataiapi.com/v1): ").strip()
+            if not base_url:
+                base_url = "https://www.chataiapi.com/v1"
+            model = input("模型名称 (回车使用 deepseek-r1): ").strip()
+            if not model:
+                model = "deepseek-r1"
+                
+            config = {
+                'enabled': True,
+                'provider': 'chataiapi',
+                'base_url': base_url,
+                'api_key': api_key,
+                'model': model,
+                'api_type': 'openai_compatible'
+            }
+        elif api_type == "2":
+            print("⚠️ 官方API需要魔法上网，建议选择中转API")
+            model = input("模型名称 (如 gemini-2.5-flash): ").strip()
+            if not model:
+                model = "gemini-2.5-flash"
+                
+            config = {
+                'enabled': True,
+                'provider': 'official',
+                'base_url': None,
+                'api_key': api_key,
+                'model': model,
+                'api_type': 'gemini_official'
+            }
+        else:
+            print("❌ 无效选择")
+            return False
+
+        # 测试连接
+        print("🔍 测试API连接...")
+        if self.test_ai_connection(config):
+            self.ai_config = config
+            self.save_ai_config(config)
+            print("✅ AI配置成功！")
+            return True
+        else:
+            print("❌ API连接失败")
+            return False
+
+    def test_ai_connection(self, config: Dict) -> bool:
+        """测试AI连接"""
+        try:
+            payload = {
+                "model": config['model'],
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "你是专业的电视剧剧情分析师"
+                    },
+                    {
+                        "role": "user", 
+                        "content": "测试连接"
+                    }
+                ],
+                "max_tokens": 10
+            }
+
+            url = config['base_url'] + "/chat/completions"
+            headers = {
+                'Accept': 'application/json',
+                'Authorization': f'Bearer {config["api_key"]}',
+                'User-Agent': 'TV-Clipper/1.0.0',
+                'Content-Type': 'application/json'
+            }
+
+            response = requests.post(url, headers=headers, json=payload, timeout=10)
+            return response.status_code == 200
+        except:
+            return False
+
+    def call_ai_api(self, prompt: str, system_prompt: str = "你是专业的电视剧剧情分析师") -> Optional[str]:
+        """调用AI API - 支持官方和中转API"""
+        if not self.ai_config.get('enabled'):
+            return None
+
+        try:
+            # 使用通用配置助手调用
+            from api_config_helper import config_helper
+            full_prompt = f"{system_prompt}\n\n{prompt}"
+            return config_helper.call_ai_api(full_prompt, self.ai_config)
+            
+        except ImportError:
+            # 备用调用方法
+            return self.call_ai_api_fallback(prompt, system_prompt)
+        except Exception as e:
+            print(f"⚠ AI调用异常: {e}")
+            return None
+
+    def call_ai_api_fallback(self, prompt: str, system_prompt: str) -> Optional[str]:
+        """备用AI调用方法"""
+        try:
+            # Gemini官方API
+            if self.ai_config.get('api_type') == 'gemini_official':
+                try:
+                    from google import genai
+                    client = genai.Client(api_key=self.ai_config['api_key'])
+                    full_prompt = f"{system_prompt}\n\n{prompt}"
+                    response = client.models.generate_content(
+                        model=self.ai_config['model'], 
+                        contents=full_prompt
+                    )
+                    return response.text
+                except ImportError:
+                    print("❌ 缺少google-genai库")
+                    return None
+            
+            # OpenAI兼容API (中转)
+            else:
+                payload = {
+                    "model": self.ai_config['model'],
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 2000,
+                    "temperature": 0.7
+                }
+
+                url = self.ai_config['base_url'] + "/chat/completions"
+                headers = {
+                    'Accept': 'application/json',
+                    'Authorization': f'Bearer {self.ai_config["api_key"]}',
+                    'User-Agent': 'TV-Clipper/1.0.0',
+                    'Content-Type': 'application/json'
+                }
+
+                response = requests.post(url, headers=headers, json=payload, timeout=30)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    # 处理deepseek-r1的特殊格式
+                    if self.ai_config['model'] == 'deepseek-r1':
+                        message = data['choices'][0]['message']
+                        if 'reasoning_content' in message:
+                            print(f"🧠 AI思考过程: {message['reasoning_content'][:100]}...")
+                        return message.get('content', '')
+                    else:
+                        return data['choices'][0]['message']['content']
+                else:
+                    print(f"⚠ API调用失败: {response.status_code}")
+                    return None
+
+        except Exception as e:
+            print(f"⚠ 备用AI调用异常: {e}")
+            return None
+
+    def parse_subtitle_file(self, filepath: str) -> List[Dict]:
+        """解析字幕文件 - 通用格式支持"""
+        try:
+            # 多编码尝试
+            for encoding in ['utf-8', 'gbk', 'gb2312']:
+                try:
+                    with open(filepath, 'r', encoding=encoding, errors='ignore') as f:
+                        content = f.read()
+                    break
+                except:
+                    continue
+
+            # 智能错别字修正
+            corrections = {
+                '防衛': '防卫', '正當': '正当', '証據': '证据', '檢察官': '检察官',
+                '發現': '发现', '設計': '设计', '開始': '开始', '結束': '结束',
+                '問題': '问题', '機會': '机会', '決定': '决定', '選擇': '选择',
+                '聽證會': '听证会', '辯護': '辩护', '審判': '审判', '調查': '调查'
+            }
+
+            for old, new in corrections.items():
+                content = content.replace(old, new)
+
+            # 解析字幕块
+            import re
+            blocks = re.split(r'\n\s*\n', content.strip())
+            subtitles = []
+
+            for block in blocks:
+                lines = block.strip().split('\n')
+                if len(lines) >= 3:
+                    try:
+                        index = int(lines[0])
+                        time_match = re.match(r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})', lines[1])
+                        if time_match:
+                            start_time = time_match.group(1)
+                            end_time = time_match.group(2)
+                            text = '\n'.join(lines[2:])
+
+                            subtitles.append({
+                                'index': index,
+                                'start': start_time,
+                                'end': end_time,
+                                'text': text,
+                                'episode': os.path.basename(filepath)
+                            })
+                    except (ValueError, IndexError):
+                        continue
+
+            return subtitles
+        except Exception as e:
+            print(f"❌ 解析字幕文件失败 {filepath}: {e}")
+            return []
+
+    def ai_analyze_episode_content(self, subtitles: List[Dict], episode_name: str) -> Dict:
+        """AI智能分析剧集内容"""
+        if not self.ai_config.get('enabled'):
+            return self.fallback_analysis(subtitles, episode_name)
+
+        # 提取关键对话内容
+        key_dialogues = []
+        for sub in subtitles[::10]:  # 每10条取1条，避免过长
+            if len(sub['text']) > 10:
+                key_dialogues.append(f"[{sub['start']}] {sub['text']}")
+
+        content_sample = '\n'.join(key_dialogues[:50])  # 最多50条
+
+        prompt = f"""
+请分析以下电视剧片段内容，识别最精彩的剧情片段用于短视频剪辑。
+
+【剧集名称】: {episode_name}
+【对话内容】:
+{content_sample}
+
+请从以下维度进行智能分析：
+1. 剧情类型识别（法律、爱情、犯罪、家庭、古装、现代等）
+2. 核心冲突点和戏剧张力
+3. 情感高潮时刻
+4. 关键信息揭露点
+5. 推荐的剪辑片段（2-3个最精彩的时间段）
+
+输出格式（JSON）：
+{{
+    "genre": "剧情类型",
+    "theme": "本集核心主题",
+    "key_conflicts": ["冲突1", "冲突2"],
+    "emotional_peaks": ["情感高潮1", "情感高潮2"],
+    "recommended_clips": [
+        {{
+            "start_time": "开始时间",
+            "end_time": "结束时间", 
+            "reason": "推荐理由",
+            "content": "内容描述"
+        }}
+    ],
+    "next_episode_hint": "与下集的衔接点"
+}}
+"""
+
+        ai_response = self.call_ai_api(prompt)
+
+        if ai_response:
             try:
-                with open(cache_file, 'r', encoding='utf-8') as f:
-                    result = json.load(f)
+                # 提取JSON部分
+                if "```json" in ai_response:
+                    json_start = ai_response.find("```json") + 7
+                    json_end = ai_response.find("```", json_start)
+                    json_text = ai_response[json_start:json_end].strip()
+                else:
+                    start = ai_response.find("{")
+                    end = ai_response.rfind("}") + 1
+                    json_text = ai_response[start:end]
 
-                episode_name = os.path.splitext(os.path.basename(cache_file))[0]
-                clips = result.get('clips', [])
-
-                print(f"\n📺 {episode_name}")
-                print(f"   精彩片段: {len(clips)} 个")
-
-                if clips:
-                    avg_score = sum(c.get('score', 0) for c in clips) / len(clips)
-                    print(f"   平均评分: {avg_score:.1f}")
-
-                    clip_duration = sum(self._parse_duration(c.get('end_time', '0:0:0')) - 
-                                      self._parse_duration(c.get('start_time', '0:0:0')) for c in clips)
-                    print(f"   总时长: {clip_duration // 60:.0f}分{clip_duration % 60:.0f}秒")
-
-                    total_clips += len(clips)
-                    total_duration += clip_duration
+                result = json.loads(json_text)
+                return self.process_ai_analysis(result, subtitles, episode_name)
 
             except Exception as e:
-                print(f"⚠️ 读取 {cache_file} 失败: {e}")
+                print(f"⚠ AI回复解析失败: {e}")
+                return self.fallback_analysis(subtitles, episode_name)
 
-        print(f"\n📈 总计统计:")
-        print(f"   总片段数: {total_clips}")
-        print(f"   总时长: {total_duration // 60:.0f}分{total_duration % 60:.0f}秒")
+        return self.fallback_analysis(subtitles, episode_name)
 
-    def _parse_duration(self, time_str: str) -> int:
-        """解析时间字符串为秒数"""
+    def process_ai_analysis(self, ai_result: Dict, subtitles: List[Dict], episode_name: str) -> Dict:
+        """处理AI分析结果"""
+        clips = []
+
+        for rec_clip in ai_result.get('recommended_clips', []):
+            start_time = rec_clip.get('start_time')
+            end_time = rec_clip.get('end_time')
+
+            if start_time and end_time:
+                clips.append({
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'duration': self.time_to_seconds(end_time) - self.time_to_seconds(start_time),
+                    'reason': rec_clip.get('reason', ''),
+                    'content': rec_clip.get('content', ''),
+                    'ai_recommended': True
+                })
+
+        # 提取集数
+        import re
+        episode_match = re.search(r'[Ee](\d+)', episode_name)
+        episode_num = episode_match.group(1) if episode_match else "00"
+
+        return {
+            'episode': episode_name,
+            'episode_number': episode_num,
+            'theme': f"E{episode_num}: {ai_result.get('theme', '精彩片段')}",
+            'genre': ai_result.get('genre', '未知'),
+            'clips': clips,
+            'key_conflicts': ai_result.get('key_conflicts', []),
+            'emotional_peaks': ai_result.get('emotional_peaks', []),
+            'next_episode_hint': ai_result.get('next_episode_hint', ''),
+            'ai_analysis': True
+        }
+
+    def fallback_analysis(self, subtitles: List[Dict], episode_name: str) -> Dict:
+        """备用分析（无AI时）"""
+        # 基于关键词的简单分析
+        dramatic_keywords = [
+            '突然', '发现', '真相', '秘密', '不可能', '为什么', '杀人', '死了', 
+            '救命', '危险', '完了', '震惊', '愤怒', '哭', '崩溃'
+        ]
+
+        high_score_segments = []
+
+        for i, subtitle in enumerate(subtitles):
+            score = 0
+            text = subtitle['text']
+
+            # 关键词评分
+            for keyword in dramatic_keywords:
+                if keyword in text:
+                    score += 2
+
+            # 标点符号评分
+            score += text.count('！') + text.count('？') + text.count('...') * 0.5
+
+            if score >= 3:
+                high_score_segments.append({
+                    'index': i,
+                    'subtitle': subtitle,
+                    'score': score
+                })
+
+        # 选择最佳片段
+        high_score_segments.sort(key=lambda x: x['score'], reverse=True)
+
+        clips = []
+        for seg in high_score_segments[:3]:  # 最多3个片段
+            start_idx = max(0, seg['index'] - 10)
+            end_idx = min(len(subtitles) - 1, seg['index'] + 15)
+
+            clips.append({
+                'start_time': subtitles[start_idx]['start'],
+                'end_time': subtitles[end_idx]['end'],
+                'duration': self.time_to_seconds(subtitles[end_idx]['end']) - self.time_to_seconds(subtitles[start_idx]['start']),
+                'reason': '基于关键词识别的精彩片段',
+                'content': seg['subtitle']['text'],
+                'ai_recommended': False
+            })
+
+        import re
+        episode_match = re.search(r'[Ee](\d+)', episode_name)
+        episode_num = episode_match.group(1) if episode_match else "00"
+
+        return {
+            'episode': episode_name,
+            'episode_number': episode_num,
+            'theme': f"E{episode_num}: 精彩片段合集",
+            'genre': '通用',
+            'clips': clips,
+            'key_conflicts': ['剧情冲突'],
+            'emotional_peaks': ['情感高潮'],
+            'next_episode_hint': '故事继续发展',
+            'ai_analysis': False
+        }
+
+    def time_to_seconds(self, time_str: str) -> float:
+        """时间转秒"""
         try:
-            parts = time_str.split(':')
-            if len(parts) == 3:
-                h, m, s = map(int, parts)
-                return h * 3600 + m * 60 + s
-            elif len(parts) == 2:
-                m, s = map(int, parts)
-                return m * 60 + s
-            else:
-                return int(parts[0])
+            h, m, s_ms = time_str.split(':')
+            s, ms = s_ms.split(',')
+            return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
         except:
             return 0
 
+    def analyze_all_episodes(self) -> List[Dict]:
+        """分析所有剧集"""
+        # 智能识别字幕文件
+        subtitle_files = []
+        for file in os.listdir('.'):
+            if file.endswith(('.txt', '.srt')) and not file.startswith('.'):
+                # 排除系统文件
+                if any(keyword in file.lower() for keyword in ['readme', 'config', 'license']):
+                    continue
+                subtitle_files.append(file)
+
+        subtitle_files.sort()
+
+        if not subtitle_files:
+            print("❌ 未找到字幕文件")
+            return []
+
+        print(f"📁 发现 {len(subtitle_files)} 个字幕文件")
+
+        all_results = []
+
+        for filename in subtitle_files:
+            print(f"\n🔍 分析: {filename}")
+            subtitles = self.parse_subtitle_file(filename)
+
+            if subtitles:
+                result = self.ai_analyze_episode_content(subtitles, filename)
+                all_results.append(result)
+
+                print(f"✅ {result['theme']}")
+                print(f"   剧情类型: {result['genre']}")
+                print(f"   推荐片段: {len(result['clips'])} 个")
+                if result['ai_analysis']:
+                    print("   🤖 AI智能分析")
+                else:
+                    print("   📝 关键词分析")
+            else:
+                print(f"❌ 解析失败: {filename}")
+
+        # 生成报告
+        self.generate_analysis_report(all_results)
+
+        return all_results
+
+    def generate_analysis_report(self, results: List[Dict]):
+        """生成分析报告"""
+        if not results:
+            return
+
+        content = "📺 智能电视剧分析报告\n"
+        content += "=" * 80 + "\n\n"
+
+        if self.ai_config.get('enabled'):
+            content += f"🤖 AI分析模式: {self.ai_config['model']}\n"
+        else:
+            content += "📝 关键词分析模式\n"
+
+        content += f"📊 分析集数: {len(results)} 集\n\n"
+
+        total_clips = 0
+        for result in results:
+            content += f"📺 {result['theme']}\n"
+            content += "-" * 60 + "\n"
+            content += f"剧情类型: {result['genre']}\n"
+            content += f"推荐片段: {len(result['clips'])} 个\n"
+
+            for i, clip in enumerate(result['clips'], 1):
+                content += f"\n🎬 片段 {i}:\n"
+                content += f"   时间: {clip['start_time']} --> {clip['end_time']}\n"
+                content += f"   时长: {clip['duration']:.1f} 秒\n"
+                content += f"   推荐理由: {clip['reason']}\n"
+                content += f"   内容: {clip['content'][:50]}...\n"
+
+            if result['key_conflicts']:
+                content += f"\n💥 核心冲突: {', '.join(result['key_conflicts'])}\n"
+
+            if result['emotional_peaks']:
+                content += f"😊 情感高潮: {', '.join(result['emotional_peaks'])}\n"
+
+            content += f"🔗 下集衔接: {result['next_episode_hint']}\n"
+            content += "=" * 80 + "\n\n"
+
+            total_clips += len(result['clips'])
+
+        content += f"📊 总计推荐片段: {total_clips} 个\n"
+
+        with open('智能分析报告.txt', 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        print(f"\n📄 分析报告已保存: 智能分析报告.txt")
+
+    def main_menu(self):
+        """主菜单"""
+        while True:
+            print("\n" + "=" * 60)
+            print("📺 智能电视剧分析剪辑系统")
+            print("=" * 60)
+
+            ai_status = "🤖 AI增强" if self.ai_config.get('enabled') else "📝 关键词分析"
+            print(f"当前模式: {ai_status}")
+
+            if self.ai_config.get('enabled'):
+                print(f"AI模型: {self.ai_config['model']}")
+
+            print("请选择操作:")
+            print("1. 📝 智能分析字幕")
+            print("2. 🎬 高级智能剪辑 (推荐)")
+            print("3. 🤖 配置AI接口")
+            print("4. 📊 查看分析报告")
+            print("5. ❌ 退出")
+
+            try:
+                choice = input("\n请输入选择 (1-5): ").strip()
+
+                if choice == '1':
+                    self.analyze_all_episodes()
+
+                elif choice == '2':
+                    # 高级智能剪辑
+                    print("\n🚀 启动高级智能剪辑系统...")
+                    print("特性：")
+                    print("• AI深度剧情理解，非固定规则")
+                    print("• 完整上下文分析，避免剧情割裂")  
+                    print("• 多段精彩识别，每集3-5个短视频")
+                    print("• 自动视频剪辑+专业旁白")
+                    print("• 保证跨集剧情连贯性")
+                    print("• 字幕放srt/目录，视频放videos/目录")
+
+                    try:
+                        from advanced_clipper import AdvancedIntelligentClipper
+                        clipper = AdvancedIntelligentClipper()
+                        clipper.run_complete_analysis()
+                    except ImportError:
+                        print("❌ 高级剪辑模块未找到")
+                    except Exception as e:
+                        print(f"❌ 高级剪辑出错: {e}")
+
+                elif choice == '3':
+                    self.setup_ai_config()
+
+                elif choice == '4':
+                    # 查看多种报告
+                    reports = [
+                        '智能分析报告.txt',
+                        'intelligent_clips/完整剧集连贯性分析.txt',
+                        'smart_analysis_report.txt'
+                    ]
+
+                    found_report = False
+                    for report_file in reports:
+                        if os.path.exists(report_file):
+                            with open(report_file, 'r', encoding='utf-8') as f:
+                                print(f"\n📄 {report_file}:")
+                                content = f.read()
+                                print(content[:1500] + "..." if len(content) > 1500 else content)
+                                found_report = True
+                                break
+
+                    if not found_report:
+                        print("❌ 未找到分析报告，请先执行分析")
+
+                elif choice == '5':
+                    print("\n👋 再见！")
+                    break
+
+                else:
+                    print("❌ 无效选择")
+
+            except KeyboardInterrupt:
+                print("\n\n👋 用户中断")
+                break
+
+def check_environment():
+    """检查环境"""
+    print("🔍 检查运行环境...")
+
+    # 检查字幕文件
+    subtitle_files = []
+    for file in os.listdir('.'):
+        if file.endswith(('.txt', '.srt')) and not file.startswith('.'):
+            if not any(keyword in file.lower() for keyword in ['readme', 'config', 'license']):
+                subtitle_files.append(file)
+
+    if subtitle_files:
+        print(f"✅ 找到 {len(subtitle_files)} 个字幕文件")
+        return True
+    else:
+        print("❌ 未找到字幕文件")
+        print("请确保字幕文件(.txt/.srt)在当前目录")
+        return False
+
 def main():
     """主函数"""
+    print("🚀 智能电视剧分析剪辑系统启动")
+
+    if not check_environment():
+        input("\n按Enter键退出...")
+        return
+
     try:
-        clipper = TVClipperMain()
-        clipper.run()
-    except KeyboardInterrupt:
-        print("\n\n👋 用户中断，退出程序")
+        system = AIClipperSystem()
+        system.main_menu()
     except Exception as e:
-        print(f"\n❌ 程序异常: {e}")
-        print("请检查错误信息并重试")
+        print(f"❌ 系统错误: {e}")
+        input("\n按Enter键退出...")
 
 if __name__ == "__main__":
     main()
 
-# 导入字幕分析器
-from subtitle_analyzer import SubtitleAnalyzer
+def view_last_results():
+    """查看上次分析结果"""
+    results_file = "smart_analysis_report.txt"
+    if os.path.exists(results_file):
+        print(f"\n📊 上次分析结果:")
+        print("=" * 60)
+        with open(results_file, 'r', encoding='utf-8') as f:
+            print(f.read())
+    else:
+        print("❌ 未找到分析结果，请先运行分析")
 
-try:
-    from video_clipper import VideoClipper
-except ImportError:
-    print("⚠️ 视频剪辑器模块未找到，将使用基础功能")
-    
-    class VideoClipper:
-        def clip_episode(self, cache_file, matching_video):
-            print(f"📹 模拟剪辑: {os.path.basename(cache_file)} -> {os.path.basename(matching_video)}")
-            return True
+    input("\n按回车键继续...")
+
+def show_api_config_menu():
+    """显示API配置菜单"""
+    while True:
+        print("\n🔧 API配置和诊断")
+        print("=" * 40)
+        print("1. 🚀 快速配置API")
+        print("2. 🔍 诊断API连接")
+        print("3. 📋 查看当前配置")
+        print("4. 🔄 重新配置API")
+        print("0. 返回主菜单")
+
+        choice = input("\n请选择 (0-4): ").strip()
+
+        if choice == "0":
+            break
+        elif choice == "1":
+            from quick_api_config import main as config_main
+            config_main()
+        elif choice == "2":
+            from diagnose_api import diagnose_api_connection, quick_fix_suggestions
+            diagnose_api_connection()
+            quick_fix_suggestions()
+        elif choice == "3":
+            show_current_config()
+        elif choice == "4":
+            from api_config_helper import config_helper
+            config = config_helper.interactive_setup()
+            if config.get('enabled'):
+                print("✅ API重新配置成功！")
+        else:
+            print("❌ 无效选择，请重试")
+
+def show_current_config():
+    """显示当前API配置"""
+    from api_config_helper import config_helper
+    config = config_helper.load_config()
+
+    print("\n📋 当前API配置:")
+    print("-" * 30)
+
+    if config.get('enabled'):
+        print(f"✅ API状态: 已配置")
+        print(f"🏢 服务商: {config.get('provider', '未知')}")
+        print(f"🔗 API地址: {config.get('base_url', '未知')}")
+        print(f"🤖 模型: {config.get('model', '未知')}")
+        print(f"🔑 密钥: {config.get('api_key', '')[:10]}..." if config.get('api_key') else "🔑 密钥: 未设置")
+
+        # 快速测试连接
+        print(f"\n🔍 快速连接测试...")
+        if config_helper._test_api_connection(config):
+            print("✅ API连接正常")
+        else:
+            print("❌ API连接异常，建议运行诊断")
+    else:
+        print("❌ API状态: 未配置")
+        print("💡 请先配置API以启用智能分析功能")
+
+    input("\n按回车键继续...")
+
+class MainMenu:
+    def __init__(self):
+        pass
+
+    def show_menu(self):
+        print("\n" + "=" * 60)
+        print("📺 智能电视剧分析剪辑系统")
+        print("=" * 60)
+        print("请选择操作:")
+        print("1. 📝 智能分析字幕")
+        print("2. 🎬 高级智能剪辑 (推荐)")
+        print("3. 📊 查看分析报告")
+        print("4. 🔧 配置或诊断API")
+        print("5. ❌ 退出")
+
+    def get_action(self):
+        choice = input("请输入选择 (1-5): ").strip()
+
+        if choice == "1":
+            return "analysis_only"
+        elif choice == "2":
+            return "full_process"
+        elif choice == "3":
+            return "view_results"
+        elif choice == "4":
+            return "api_config"
+        elif choice == "5":
+            return "exit"
+        else:
+            print("❌ 无效选择，请重新输入")
+            return None
+
+def main():
+    """主函数"""
+    print("🚀 智能电视剧分析剪辑系统启动")
+
+    if not check_environment():
+        input("\n按Enter键退出...")
+        return
+
+    try:
+        system = AIClipperSystem()
+        menu = MainMenu()
+
+        while True:
+            menu.show_menu()
+            action = menu.get_action()
+
+            if action == "analysis_only":
+                system.analyze_all_episodes()
+            elif action == "full_process":
+                # 高级智能剪辑
+                print("\n🚀 启动高级智能剪辑系统...")
+                print("特性：")
+                print("• AI深度剧情理解，非固定规则")
+                print("• 完整上下文分析，避免剧情割裂")
+                print("• 多段精彩识别，每集3-5个短视频")
+                print("• 自动视频剪辑+专业旁白")
+                print("• 保证跨集剧情连贯性")
+                print("• 字幕放srt/目录，视频放videos/目录")
+
+                try:
+                    from advanced_clipper import AdvancedIntelligentClipper
+                    clipper = AdvancedIntelligentClipper()
+                    clipper.run_complete_analysis()
+                except ImportError:
+                    print("❌ 高级剪辑模块未找到")
+                except Exception as e:
+                    print(f"❌ 高级剪辑出错: {e}")
+            elif action == "view_results":
+                view_last_results()
+            elif action == "api_config":
+                show_api_config_menu()
+            elif action == "exit":
+                print("👋 感谢使用智能剪辑系统！")
+                break
+            else:
+                pass # Invalid choice is already handled in get_action()
+
+    except KeyboardInterrupt:
+        print("\n\n👋 用户中断")
+    except Exception as e:
+        print(f"❌ 系统错误: {e}")
+        input("\n按Enter键退出...")
+
+if __name__ == "__main__":
+    main()
