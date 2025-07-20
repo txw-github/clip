@@ -4,7 +4,7 @@ modules = ["python-3.12"]
 channel = "stable-24_05"
 
 [workflows]
-runButton = "电视剧短视频剪辑"
+runButton = "智能电视剧剪辑"
 
 [[workflows.workflow]]
 name = "运行智能剪辑系统"
@@ -54,3 +54,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python start_tv_clipping.py"
+
+[[workflows.workflow]]
+name = "智能电视剧剪辑"
+author = 45269356
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python start_intelligent_clipper.py"
