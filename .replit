@@ -4,7 +4,7 @@ modules = ["python-3.12"]
 channel = "stable-24_05"
 
 [workflows]
-runButton = "集成智能剪辑系统"
+runButton = "核心剧情剪辑系统"
 
 [[workflows.workflow]]
 name = "运行智能剪辑系统"
@@ -85,3 +85,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python main.py"
+
+[[workflows.workflow]]
+name = "核心剧情剪辑系统"
+author = 45270989
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python start_core_clipping.py"
