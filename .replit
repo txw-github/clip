@@ -5,7 +5,7 @@ run = "python main.py"
 channel = "stable-24_05"
 
 [workflows]
-runButton = "统一智能剪辑系统"
+runButton = "稳定AI剪辑系统"
 
 [[workflows.workflow]]
 name = "运行智能剪辑系统"
@@ -46,6 +46,15 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python main.py"
+
+[[workflows.workflow]]
+name = "稳定AI剪辑系统"
+author = 45274476
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python start_stable_clipper.py"
 
 [deployment]
 run = ["sh", "-c", "python main.py"]
