@@ -179,65 +179,181 @@ class UnifiedTVClipper:
         text_segments = self._create_text_segments(full_text, max_length=8000)
         main_segment = text_segments[0] if text_segments else full_text[:8000]
 
-        # **改进3**: 专业剪辑师提示词，确保剧情连贯性
-        prompt = f"""你是专业电视剧剪辑师，请为{episode_num}进行完整分析，创建3-5个连贯短视频片段。
+        # **改进3**: 高级AI分析提示词，深度剧情理解
+        prompt = f"""# 电视剧剧情深度分析与短视频剪辑策略
 
-【完整剧集内容】
+你是资深影视剧情分析师和短视频剪辑专家，具备以下专业能力：
+- 深度剧情解构和戏剧冲突识别
+- 情感节奏把控和观众心理分析
+- 故事线索梳理和伏笔铺垫分析
+- 短视频传播规律和爆点预测
+
+## 分析目标
+为 **{episode_num}** 创建3-5个高质量连贯短视频片段，确保完整剧情叙述。
+
+## 剧集内容
+```
 {main_segment}
+```
 
-**核心要求**：
-1. 剧情连贯性：所有短视频合起来能完整叙述本集剧情
-2. 反转处理：如果有剧情反转，需要联系前面内容
-3. 完整对话：确保每个片段都是完整场景，不截断重要对话
-4. 专业旁白：为每个片段生成深度剧情解说
+## 深度分析维度
 
-请返回JSON格式：
+### 1. 剧情结构分析
+- **起承转合**：识别完整戏剧结构
+- **冲突层次**：主线冲突、支线冲突、内心冲突
+- **节奏控制**：紧张-缓解-高潮的节奏变化
+- **信息密度**：关键信息的分布和揭示时机
+
+### 2. 角色关系动态
+- **关系转折**：角色间关系的重要变化点
+- **情感转换**：情感状态的戏剧性变化
+- **立场对立**：观点冲突和价值观碰撞
+- **成长轨迹**：角色内在发展和突破
+
+### 3. 剧情连贯性保证
+- **前情回应**：对前集内容的呼应和发展
+- **伏笔铺垫**：为后续剧情埋下的线索
+- **逻辑链条**：因果关系的完整性
+- **反转处理**：如何处理剧情反转与前文的关联
+
+### 4. 短视频传播价值
+- **情感共鸣点**：能引起观众强烈共鸣的内容
+- **讨论话题性**：容易引发讨论的争议点
+- **记忆点设计**：令人印象深刻的台词或情节
+- **观众代入感**：让观众产生代入感的场景
+
+## 输出要求
+
+请严格按照以下JSON格式输出分析结果：
+
+```json
 {{
     "episode_analysis": {{
         "episode_number": "{episode_num}",
-        "main_theme": "本集核心主题",
-        "plot_type": "法律剧/悬疑剧/都市剧等",
-        "emotional_arc": "情感发展弧线",
-        "key_conflicts": ["核心冲突1", "核心冲突2"],
-        "plot_continuity": "与前后集的剧情连贯说明"
+        "genre_classification": "具体类型(如:都市情感/法律悬疑/家庭伦理/职场竞争)",
+        "core_theme": "本集核心主题(一句话概括)",
+        "emotional_arc": "情感发展轨迹(从...到...的变化)",
+        "plot_structure": {{
+            "setup": "情节设置阶段的关键内容",
+            "development": "发展阶段的主要冲突",
+            "climax": "高潮部分的核心事件",
+            "resolution": "解决阶段的关键转折"
+        }},
+        "key_conflicts": [
+            "主要冲突1(具体描述)",
+            "次要冲突2(具体描述)"
+        ],
+        "narrative_techniques": ["倒叙", "插叙", "对比", "伏笔", "悬念"]
     }},
     "highlight_segments": [
         {{
             "segment_id": 1,
-            "title": "片段标题（吸引人的）",
-            "start_time": "HH:MM:SS,mmm",
-            "end_time": "HH:MM:SS,mmm",
-            "duration_seconds": 150,
-            "plot_significance": "剧情重要性说明",
-            "dramatic_value": 8.5,
-            "emotional_peak": "情感高潮描述",
-            "key_dialogues": ["关键台词1", "关键台词2"],
-            "content_highlights": ["亮点1", "亮点2"],
-            "narrative_voice": {{
-                "opening": "开场解说文字",
-                "process": "过程解说文字", 
-                "climax": "高潮解说文字",
-                "ending": "结尾解说文字"
+            "title": "【引人入胜的标题】",
+            "start_time": "00:XX:XX,XXX",
+            "end_time": "00:XX:XX,XXX", 
+            "duration_seconds": XXX,
+            "segment_type": "冲突爆发/情感转折/真相揭示/关系突破",
+            "dramatic_analysis": {{
+                "conflict_intensity": 9.2,
+                "emotional_impact": 8.8,
+                "plot_advancement": 9.0,
+                "audience_engagement": 9.5,
+                "overall_score": 9.1
             }},
-            "connection_to_next": "与下个片段的逻辑连接"
+            "content_breakdown": {{
+                "setup_context": "场景背景和前情回顾",
+                "core_conflict": "核心冲突的具体表现",
+                "character_dynamics": "角色互动和关系变化",
+                "emotional_peaks": "情感高潮的具体时刻",
+                "plot_significance": "对整体剧情的重要意义"
+            }},
+            "key_dialogues": [
+                {{"speaker": "角色名", "line": "关键台词", "impact": "台词影响力说明"}},
+                {{"speaker": "角色名", "line": "重要对话", "impact": "对剧情的推进作用"}}
+            ],
+            "visual_highlights": [
+                "视觉亮点1(表情/动作/场景)",
+                "视觉亮点2(构图/色彩/道具)"
+            ],
+            "narrative_voice": {{
+                "hook_opening": "15秒内抓住观众的开场解说",
+                "context_building": "30-45秒建立背景和冲突",
+                "tension_escalation": "45-90秒冲突升级解说",
+                "climax_moment": "90-120秒高潮时刻解说",
+                "impact_conclusion": "最后15秒影响和意义总结"
+            }},
+            "social_media_appeal": {{
+                "hashtag_potential": ["#相关话题1", "#热门标签2"],
+                "discussion_points": ["争议点1", "共鸣点2"],
+                "shareability_score": 8.5,
+                "viral_elements": ["反转", "金句", "情感爆点"]
+            }},
+            "continuity_bridge": "与下个片段的故事连接和逻辑过渡"
         }}
     ],
     "series_continuity": {{
-        "previous_episode_link": "与上集的连接点",
-        "next_episode_setup": "为下集埋下的伏笔",
-        "character_development": "角色发展重点",
-        "plot_threads": ["剧情线索1", "剧情线索2"]
+        "previous_connections": [
+            "与前集的具体关联点1",
+            "前情铺垫的回应2"
+        ],
+        "future_setups": [
+            "为后续剧情埋下的伏笔1",
+            "角色发展的铺垫2"
+        ],
+        "character_arcs": {{
+            "主角名": "在本集中的成长变化",
+            "重要配角": "关系或立场的转变"
+        }},
+        "plot_threads": [
+            "主线剧情的发展状态",
+            "支线故事的推进情况"
+        ]
+    }},
+    "technical_requirements": {{
+        "editing_notes": [
+            "剪辑建议1(如:保留完整对话)",
+            "技术要求2(如:突出表情特写)"
+        ],
+        "audio_focus": [
+            "重点音频1(关键台词)",
+            "背景音乐建议2"
+        ],
+        "pacing_control": "节奏控制建议"
     }}
 }}
+```
 
-**关键**：时间必须精确对应字幕，确保完整对话场景。"""
+## 分析标准
+- **准确性**：时间码必须精确对应字幕内容
+- **完整性**：每个片段必须是完整的戏剧单元
+- **连贯性**：片段间要有清晰的逻辑关联
+- **传播性**：符合短视频平台的传播规律
+- **专业性**：体现专业剧情分析的深度
 
-        system_prompt = """你是资深电视剧剪辑师和编剧分析师，精通：
-1. 剧情结构分析和故事线梳理
-2. 戏剧冲突识别和情感节点把握  
-3. 角色关系发展和人物弧线设计
-4. 短视频剪辑和观众心理分析
-请严格按照JSON格式返回专业分析结果。"""
+请开始深度分析。"""
+
+        system_prompt = """你是顶级影视内容分析专家，拥有以下核心专长：
+
+**专业背景**：
+- 15年影视剧情分析经验，深度解构过500+优秀作品
+- 短视频爆款制作专家，累计播放量10亿+
+- 戏剧理论专家，精通亚里士多德《诗学》和现代叙事学
+- 观众心理学研究者，深谙传播规律和情感共鸣机制
+
+**核心能力**：
+1. **深层剧情解构**：识别隐藏的戏剧结构、伏笔呼应、主题层次
+2. **情感节奏精准把控**：预测观众情感曲线，找到最佳切入点
+3. **角色关系动态分析**：追踪复杂人物关系网络的微妙变化
+4. **短视频传播策略**：结合平台算法和用户习惯，提升传播效果
+5. **跨集连贯性设计**：确保单集精彩度与整体叙事的平衡
+
+**分析原则**：
+- 以观众情感共鸣为核心驱动
+- 平衡艺术性与传播性
+- 注重细节但不失大局观
+- 数据驱动的理性分析与直觉判断并重
+
+请运用你的专业知识，进行深度而精准的剧情分析，确保输出的JSON格式严谨且内容丰富。"""
 
         try:
             response = ai_client.call_ai(prompt, system_prompt)
