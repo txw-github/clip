@@ -24,15 +24,19 @@ class UnifiedAIClient:
             return False
             
         config = unified_config.config
-        provider = config.get('provider')
+        
+        # 确定provider类型
+        api_type = config.get('api_type', 'proxy')
+        model_provider = config.get('model_provider', 'openai')
         
         try:
-            if provider == 'gemini_official':
+            if api_type == 'gemini_official' or model_provider == 'gemini':
                 self._init_gemini_client(config)
+                self.provider_type = 'gemini'
             else:
                 self._init_openai_compatible_client(config)
+                self.provider_type = 'openai_compatible'
             
-            self.provider_type = provider
             return True
             
         except Exception as e:
@@ -72,6 +76,7 @@ class UnifiedAIClient:
         # 初始化客户端
         if not self.client:
             if not self._initialize_client():
+                print("❌ AI客户端初始化失败")
                 return None
         
         config = unified_config.config
@@ -79,11 +84,16 @@ class UnifiedAIClient:
         try:
             if self.provider_type == 'gemini':
                 return self._call_gemini(prompt, system_prompt, config)
-            else:
+            elif self.provider_type == 'openai_compatible':
                 return self._call_openai_compatible(prompt, system_prompt, config)
+            else:
+                print(f"❌ 未知的provider类型: {self.provider_type}")
+                return None
                 
         except Exception as e:
             print(f"❌ AI调用失败: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def _call_gemini(self, prompt: str, system_prompt: str, config: Dict[str, Any]) -> str:
@@ -115,7 +125,7 @@ class UnifiedAIClient:
         }
         
         # 添加额外headers
-        if 'extra_headers' in config:
+        if 'extra_headers' in config and config['extra_headers']:
             request_params['extra_headers'] = config['extra_headers']
         
         completion = self.client.chat.completions.create(**request_params)
