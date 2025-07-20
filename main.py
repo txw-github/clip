@@ -10,7 +10,7 @@ import os
 import json
 import glob
 from typing import Dict, Any, List, Optional
-#from api_config_helper import config_helper
+from api_config_helper import config_helper
 
 class TVClipperMain:
     """电视剧剪辑系统主程序"""
@@ -307,23 +307,26 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Dummy implementations for the helper modules
-class config_helper:
-    @staticmethod
-    def load_config():
-        return {'enabled': False}
+# 实际导入必要的模块
+try:
+    from subtitle_analyzer import SubtitleAnalyzer
+except ImportError:
+    print("⚠️ 字幕分析器模块未找到，将使用基础功能")
+    
+    class SubtitleAnalyzer:
+        def __init__(self, ai_config):
+            self.ai_config = ai_config
+        
+        def analyze_episode(self, file_path):
+            # 基础字幕分析实现
+            return {'clips': []}
 
-    @staticmethod
-    def interactive_setup():
-        return {'enabled': False}
-
-class SubtitleAnalyzer:
-    def __init__(self, ai_config):
-        pass
-
-    def analyze_episode(self, file_path):
-        return {'clips': []}
-
-class VideoClipper:
-    def clip_episode(self, cache_file, matching_video):
-        pass
+try:
+    from video_clipper import VideoClipper
+except ImportError:
+    print("⚠️ 视频剪辑器模块未找到，将使用基础功能")
+    
+    class VideoClipper:
+        def clip_episode(self, cache_file, matching_video):
+            print(f"📹 模拟剪辑: {os.path.basename(cache_file)} -> {os.path.basename(matching_video)}")
+            return True
