@@ -28,11 +28,11 @@ class UnifiedTVClipper:
         for folder in [self.srt_folder, self.video_folder, self.output_folder, self.cache_folder]:
             os.makedirs(folder, exist_ok=True)
 
-        # **新增**: 剪辑时长控制标准
+        # **更新**: 移除剪辑时长限制，允许灵活剪辑
         self.clip_duration_standards = {
-            'min_duration': 90,   # 最短1.5分钟
-            'max_duration': 240,  # 最长4分钟  
-            'target_duration': 150,  # 目标2.5分钟
+            'min_duration': 30,   # 最短30秒（避免过短片段）
+            'max_duration': 600,  # 最长10分钟（允许长片段）
+            'target_duration': None,  # 不设固定目标时长
             'buffer_seconds': 5   # 前后缓冲5秒
         }
 
@@ -42,7 +42,7 @@ class UnifiedTVClipper:
         print(f"🎬 视频目录: {self.video_folder}/")
         print(f"📤 输出目录: {self.output_folder}/")
         print(f"💾 缓存目录: {self.cache_folder}/")
-        print(f"⏱️ 片段时长: {self.clip_duration_standards['min_duration']}-{self.clip_duration_standards['max_duration']}秒")
+        print(f"⏱️ 片段时长: 根据剧情需要自由确定")
 
         # 显示AI状态
         if unified_config.is_enabled():
@@ -250,7 +250,7 @@ class UnifiedTVClipper:
 角色发展: {prev_info.get('character_development', '角色关系变化')}
 """
 
-        # **高级AI分析提示词 - 参考您的专业示例**
+        # **高级AI分析提示词 - 无时长限制版本**
         prompt = f"""# 电视剧剧情深度分析与专业短视频制作
 
 你是顶级影视剧情分析师和短视频制作专家，请为 **{episode_num}** 进行专业分析。
@@ -275,11 +275,11 @@ class UnifiedTVClipper:
 - 为后续剧集埋下的伏笔
 - 角色关系的演进轨迹
 
-### 2. 精彩片段识别（每段{self.clip_duration_standards['min_duration']}-{self.clip_duration_standards['max_duration']}秒）
-- 识别3-4个高质量独立片段
+### 2. 精彩片段识别（不限制数量和时长）
+- 根据剧情自然节奏识别所有精彩片段
 - 每个片段必须有完整的戏剧结构
 - 确保片段间的逻辑连贯性
-- 时长控制在标准范围内
+- 时长完全根据剧情需要确定，可以是几十秒到几分钟
 
 ### 3. 专业旁白解说（参考示例风格）
 - 开场: 制造悬念和吸引力的开场白
@@ -406,7 +406,7 @@ class UnifiedTVClipper:
             return None
 
     def _validate_and_adjust_segments(self, analysis: Dict) -> Dict:
-        """**新增**: 验证和调整片段时长"""
+        """**更新**: 基础验证，不强制调整时长"""
         segments = analysis.get('highlight_segments', [])
         
         for segment in segments:
@@ -418,27 +418,21 @@ class UnifiedTVClipper:
             end_seconds = self._time_to_seconds(end_time)
             actual_duration = end_seconds - start_seconds
             
-            # **时长调整逻辑**
-            if actual_duration < self.clip_duration_standards['min_duration']:
-                # 太短，延长到最小时长
-                target_end = start_seconds + self.clip_duration_standards['min_duration']
-                segment['end_time'] = self._seconds_to_time(target_end)
-                segment['duration_seconds'] = self.clip_duration_standards['min_duration']
-                print(f"    ⚠️ 片段时长调整: {actual_duration:.1f}s -> {self.clip_duration_standards['min_duration']}s")
+            # **仅基础验证，不强制调整**
+            if actual_duration < 5:  # 仅过滤过短片段（小于5秒）
+                print(f"    ⚠️ 片段过短，跳过: {actual_duration:.1f}s")
+                continue
                 
-            elif actual_duration > self.clip_duration_standards['max_duration']:
-                # 太长，缩短到最大时长
-                target_end = start_seconds + self.clip_duration_standards['max_duration']
-                segment['end_time'] = self._seconds_to_time(target_end)
-                segment['duration_seconds'] = self.clip_duration_standards['max_duration']
-                print(f"    ⚠️ 片段时长调整: {actual_duration:.1f}s -> {self.clip_duration_standards['max_duration']}s")
-            else:
-                segment['duration_seconds'] = actual_duration
+            # 保持原始时长
+            segment['duration_seconds'] = actual_duration
+            print(f"    ✅ 片段时长: {actual_duration:.1f}s（保持原始长度）")
 
             # **确保旁白完整性**
             if 'professional_narration' not in segment:
                 segment['professional_narration'] = self._generate_professional_narration(segment)
 
+        # 过滤掉过短的片段
+        analysis['highlight_segments'] = [seg for seg in segments if seg.get('duration_seconds', 0) >= 5]
         return analysis
 
     def _generate_professional_narration(self, segment: Dict) -> Dict:
@@ -498,7 +492,7 @@ class UnifiedTVClipper:
         }
 
     def _find_key_segments_by_rules(self, subtitles: List[Dict]) -> List[Dict]:
-        """基于规则找到关键片段"""
+        """基于规则找到关键片段 - 无时长限制版本"""
         key_segments = []
         
         keywords = {
@@ -507,45 +501,40 @@ class UnifiedTVClipper:
             '反转': 5, '发现': 4, '冲突': 4, '决定': 3
         }
         
-        # **改进**: 按时长标准分析窗口
-        target_duration = self.clip_duration_standards['target_duration']
-        avg_subtitle_duration = 3  # 假设每条字幕3秒
-        window_size = max(30, target_duration // avg_subtitle_duration)
+        # **更新**: 使用动态窗口，不限制时长
+        window_sizes = [20, 40, 60, 80]  # 不同大小的窗口
         
-        for i in range(0, len(subtitles) - window_size, window_size // 2):
-            window = subtitles[i:i + window_size]
-            text = ' '.join([sub['text'] for sub in window])
-            
-            score = 0
-            for keyword, weight in keywords.items():
-                score += text.count(keyword) * weight
-            
-            if score >= 15:
-                # **确保时长符合标准**
-                actual_duration = self._time_to_seconds(window[-1]['end']) - self._time_to_seconds(window[0]['start'])
+        for window_size in window_sizes:
+            for i in range(0, len(subtitles) - window_size, window_size // 3):
+                window = subtitles[i:i + window_size]
+                text = ' '.join([sub['text'] for sub in window])
                 
-                # 调整窗口大小以符合时长要求
-                if actual_duration < self.clip_duration_standards['min_duration']:
-                    # 扩展窗口
-                    extended_end = min(i + int(self.clip_duration_standards['min_duration'] / avg_subtitle_duration), len(subtitles) - 1)
-                    window = subtitles[i:extended_end]
-                elif actual_duration > self.clip_duration_standards['max_duration']:
-                    # 缩短窗口
-                    reduced_end = i + int(self.clip_duration_standards['max_duration'] / avg_subtitle_duration)
-                    window = subtitles[i:reduced_end]
+                score = 0
+                for keyword, weight in keywords.items():
+                    score += text.count(keyword) * weight
                 
-                key_segments.append({
-                    "segment_id": len(key_segments) + 1,
-                    "title": f"【精彩片段{len(key_segments) + 1}】关键剧情",
-                    "start_time": window[0]['start'],
-                    "end_time": window[-1]['end'],
-                    "duration_seconds": self._time_to_seconds(window[-1]['end']) - self._time_to_seconds(window[0]['start']),
-                    "dramatic_value": min(score / 10, 10),
-                    "plot_significance": "基于关键词识别的重要片段",
-                    "professional_narration": self._generate_professional_narration({"title": f"片段{len(key_segments) + 1}"})
-                })
+                if score >= 15:
+                    # **保持原始时长，不做调整**
+                    actual_duration = self._time_to_seconds(window[-1]['end']) - self._time_to_seconds(window[0]['start'])
+                    
+                    # 只过滤明显异常的片段
+                    if actual_duration < 5 or actual_duration > 1800:  # 5秒到30分钟
+                        continue
+                    
+                    key_segments.append({
+                        "segment_id": len(key_segments) + 1,
+                        "title": f"【精彩片段{len(key_segments) + 1}】关键剧情",
+                        "start_time": window[0]['start'],
+                        "end_time": window[-1]['end'],
+                        "duration_seconds": actual_duration,
+                        "dramatic_value": min(score / 10, 10),
+                        "plot_significance": "基于关键词识别的重要片段",
+                        "professional_narration": self._generate_professional_narration({"title": f"片段{len(key_segments) + 1}"})
+                    })
         
-        return key_segments
+        # 去重和排序
+        key_segments.sort(key=lambda x: self._time_to_seconds(x['start_time']))
+        return key_segments[:10]  # 最多返回10个片段
 
     def find_matching_video(self, subtitle_filename: str) -> Optional[str]:
         """匹配视频文件"""
@@ -843,7 +832,7 @@ class UnifiedTVClipper:
         print(f"\n📊 处理完成:")
         print(f"✅ 成功处理: {total_success}/{len(srt_files)} 集")
         print(f"🎬 生成片段: {final_clips} 个")
-        print(f"⏱️ 片段时长: {self.clip_duration_standards['min_duration']}-{self.clip_duration_standards['max_duration']}秒标准")
+        print(f"⏱️ 片段时长: 无限制，根据剧情自然节奏")
 
     def show_main_menu(self):
         """主菜单"""
