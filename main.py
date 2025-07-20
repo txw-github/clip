@@ -355,7 +355,7 @@ class UnifiedTVClipper:
         # 构建完整上下文
         context = self._build_context(subtitles)
         
-        prompt = f"""你是专业的电视剧剪辑师，需要为第{episode_num}集创建3-5个2-3分钟的精彩短视频。
+        prompt = f"""你是专业的电视剧剪辑师，需要为{filename}创建3-5个2-3分钟的精彩短视频。
 
 【完整剧情内容】
 {context}
@@ -371,6 +371,7 @@ class UnifiedTVClipper:
 {{
     "episode_analysis": {{
         "episode_number": "{episode_num}",
+        "filename": "{filename}",
         "genre": "剧情类型",
         "main_theme": "本集主题",
         "story_arc": "剧情发展"
@@ -427,7 +428,57 @@ class UnifiedTVClipper:
         return '\n\n'.join(context_parts)
 
     def _call_ai_api(self, prompt: str) -> Optional[str]:
-        """调用AI API"""
+        """调用AI API - 区分官方和中转"""
+        provider = self.ai_config.get('provider', 'proxy')
+        
+        if provider == 'openai':
+            return self._call_openai_official(prompt)
+        elif provider in ['proxy', 'custom']:
+            return self._call_proxy_api(prompt)
+        else:
+            print(f"⚠️ 未知的API提供商: {provider}")
+            return None
+
+    def _call_openai_official(self, prompt: str) -> Optional[str]:
+        """调用OpenAI官方API"""
+        try:
+            headers = {
+                'Authorization': f'Bearer {self.ai_config["api_key"]}',
+                'Content-Type': 'application/json',
+                'User-Agent': 'TV-Clipper/1.0'
+            }
+            
+            data = {
+                'model': self.ai_config.get('model', 'gpt-3.5-turbo'),
+                'messages': [
+                    {'role': 'system', 'content': '你是专业的电视剧剪辑师，擅长识别精彩片段和保持剧情连贯性。'},
+                    {'role': 'user', 'content': prompt}
+                ],
+                'max_tokens': 4000,
+                'temperature': 0.7
+            }
+            
+            print("🤖 调用OpenAI官方API...")
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=data,
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get('choices', [{}])[0].get('message', {}).get('content', '')
+            else:
+                print(f"⚠️ OpenAI官方API调用失败: {response.status_code}")
+                
+        except Exception as e:
+            print(f"⚠️ OpenAI官方API异常: {e}")
+        
+        return None
+
+    def _call_proxy_api(self, prompt: str) -> Optional[str]:
+        """调用中转API"""
         try:
             headers = {
                 'Authorization': f'Bearer {self.ai_config["api_key"]}',
@@ -441,11 +492,15 @@ class UnifiedTVClipper:
                     {'role': 'user', 'content': prompt}
                 ],
                 'max_tokens': 4000,
-                'temperature': 0.7
+                'temperature': 0.7,
+                'stream': False
             }
             
+            base_url = self.ai_config.get('base_url', 'https://api.chatanywhere.tech/v1')
+            print(f"🔗 调用中转API: {base_url}")
+            
             response = requests.post(
-                f"{self.ai_config.get('base_url', 'https://api.openai.com/v1')}/chat/completions",
+                f"{base_url}/chat/completions",
                 headers=headers,
                 json=data,
                 timeout=60
@@ -455,10 +510,10 @@ class UnifiedTVClipper:
                 result = response.json()
                 return result.get('choices', [{}])[0].get('message', {}).get('content', '')
             else:
-                print(f"⚠️ API调用失败: {response.status_code}")
+                print(f"⚠️ 中转API调用失败: {response.status_code} - {response.text[:200]}")
                 
         except Exception as e:
-            print(f"⚠️ API调用异常: {e}")
+            print(f"⚠️ 中转API异常: {e}")
         
         return None
 
@@ -556,22 +611,30 @@ class UnifiedTVClipper:
         }
 
     def find_matching_video(self, subtitle_filename: str) -> Optional[str]:
-        """智能匹配视频文件"""
+        """智能匹配视频文件 - 优先精确匹配同名文件"""
         base_name = os.path.splitext(subtitle_filename)[0]
         
-        # 精确匹配
-        video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv']
+        # 精确匹配：SRT和视频文件同名
+        video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.ts', '.m4v']
+        
+        print(f"🔍 查找视频文件: {base_name}")
+        
         for ext in video_extensions:
             video_path = os.path.join(self.video_folder, base_name + ext)
             if os.path.exists(video_path):
+                print(f"✅ 找到精确匹配: {base_name + ext}")
                 return video_path
         
-        # 模糊匹配
+        # 模糊匹配：如果没有同名文件
+        print(f"🔍 尝试模糊匹配...")
         for filename in os.listdir(self.video_folder):
-            if any(filename.lower().endswith(ext) for ext in video_extensions):
-                if base_name.lower() in filename.lower():
+            if any(filename.lower().endswith(ext.lower()) for ext in video_extensions):
+                video_base = os.path.splitext(filename)[0]
+                if base_name.lower() in video_base.lower() or video_base.lower() in base_name.lower():
+                    print(f"📁 找到模糊匹配: {filename}")
                     return os.path.join(self.video_folder, filename)
         
+        print(f"❌ 未找到匹配的视频文件")
         return None
 
     def create_video_clips(self, analysis: Dict, video_file: str, subtitle_filename: str) -> List[str]:
@@ -702,13 +765,19 @@ class UnifiedTVClipper:
             print(f"   ⚠️ 旁白生成失败: {e}")
 
     def _extract_episode_number(self, filename: str) -> str:
-        """提取集数"""
-        patterns = [r'[Ee](\d+)', r'EP(\d+)', r'第(\d+)集', r'S\d+E(\d+)']
+        """提取集数 - 直接使用SRT文件名"""
+        # 直接使用文件名作为集数标识
+        base_name = os.path.splitext(filename)[0]
+        
+        # 尝试提取数字集数
+        patterns = [r'[Ee](\d+)', r'EP(\d+)', r'第(\d+)集', r'S\d+E(\d+)', r'(\d+)']
         for pattern in patterns:
-            match = re.search(pattern, filename, re.I)
+            match = re.search(pattern, base_name, re.I)
             if match:
                 return match.group(1).zfill(2)
-        return "00"
+        
+        # 如果没有找到数字，返回文件名本身
+        return base_name
 
     def _time_to_seconds(self, time_str: str) -> float:
         """时间转换为秒"""
