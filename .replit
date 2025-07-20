@@ -45,7 +45,7 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python start_unified_system.py"
+args = "python main.py"
 
 [deployment]
 run = ["sh", "-c", "python main.py"]
