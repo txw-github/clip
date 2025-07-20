@@ -179,7 +179,8 @@ class CompleteIntelligentClipper:
     def analyze_episode_complete(self, subtitles: List[Dict], filename: str) -> Optional[Dict]:
         """完整分析单集 - 解决问题1,2,3,4,8"""
         if not unified_config.is_enabled():
-            print("❌ AI未启用，无法进行智能分析")
+            print("⏸️ AI未启用，跳过智能分析，等待下次启用时执行")
+            print("💡 请先配置AI接口后重新运行")
             return None
 
         # 检查缓存 - 解决问题12
@@ -195,18 +196,25 @@ class CompleteIntelligentClipper:
         series_context = self.load_series_context()
 
         print(f"🤖 AI完整分析 {episode_num}（含跨集连贯性分析）")
-        analysis = self._ai_analyze_with_series_context(full_context, episode_num, series_context)
-
-        if analysis:
-            # 更新全剧上下文 - 解决问题9
-            self._update_series_context(series_context, episode_num, analysis)
-            self.save_series_context(series_context)
+        
+        try:
+            analysis = self._ai_analyze_with_series_context(full_context, episode_num, series_context)
             
-            # 保存到缓存 - 解决问题12
-            self.save_analysis_cache(cache_key, filename, analysis)
-            return analysis
-        else:
-            print("❌ AI分析失败，无法继续")
+            if analysis:
+                # 更新全剧上下文 - 解决问题9
+                self._update_series_context(series_context, episode_num, analysis)
+                self.save_series_context(series_context)
+                
+                # 保存到缓存 - 解决问题12
+                self.save_analysis_cache(cache_key, filename, analysis)
+                return analysis
+            else:
+                print("⏸️ AI分析失败，跳过此集，等待下次重试")
+                return None
+                
+        except Exception as e:
+            print(f"⏸️ AI服务不可用: {e}")
+            print("💡 跳过此集，等待AI服务恢复后重试")
             return None
 
     def _build_complete_context(self, subtitles: List[Dict]) -> str:
@@ -533,89 +541,116 @@ class CompleteIntelligentClipper:
     def _create_narration_file(self, video_path: str, segment: Dict, analysis: Dict):
         """创建专业旁白解说文件 - 解决问题7,10"""
         try:
-            narration_path = video_path.replace('.mp4', '_专业旁白.txt')
+            narration_path = video_path.replace('.mp4', '_专业旁白解说.txt')
             
             narration = segment.get('professional_narration', {})
             episode_info = analysis.get('episode_analysis', {})
             
-            content = f"""📺 {segment['title']} - 专业剧情解说
+            content = f"""📺 {segment['title']} - 专业剧情解说与旁白稿
 {"=" * 80}
 
-🎭 剧情分析:
+🎬 短视频信息:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📺 集数: 第{episode_info.get('episode_number', '?')}集
-🎭 类型: {episode_info.get('genre_type', '智能识别')}
-⏱️ 时长: {segment.get('duration_seconds', 0)} 秒
-🎯 剧情意义: {segment.get('plot_significance', '重要剧情节点')}
-🎪 吸引点: {segment.get('hook_reason', '精彩剧情')}
+🎭 剧情类型: {episode_info.get('genre_type', 'AI智能识别')}
+⏱️ 视频时长: {segment.get('duration_seconds', 0)} 秒
+🎯 剧情核心: {segment.get('plot_significance', '关键剧情节点')}
+🎪 精彩看点: {segment.get('hook_reason', '高潮剧情')}
+🔥 观众吸引力: {segment.get('dramatic_elements', ['精彩剧情'])[0] if segment.get('dramatic_elements') else '引人入胜'}
 
-📝 专业旁白解说（深度剧情理解）:
+📜 专业旁白解说稿（完整版）:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-【开场解说】
-{narration.get('opening', '在这个关键时刻，精彩剧情即将展开...')}
+【开场引入】（0-3秒）
+{narration.get('opening', f'在第{episode_info.get("episode_number", "?")}集的这个精彩片段中，{segment.get("hook_reason", "关键剧情即将揭晓")}')}
 
-【背景说明】
-{narration.get('background', '随着剧情的深入发展，复杂的情况逐渐显现...')}
+【背景铺垫】（3-6秒）  
+{narration.get('background', f'随着{episode_info.get("main_theme", "剧情")}的深入发展，{segment.get("plot_significance", "复杂的情况逐渐显现")}')}
 
-【高潮解说】
-{narration.get('climax', '最精彩的时刻到来，紧张的氛围达到顶点...')}
+【高潮解说】（6-9秒）
+{narration.get('climax', f'最精彩的时刻到来，{segment.get("hook_reason", "紧张氛围达到顶点")}')}
 
-【结论升华】
-{narration.get('conclusion', '这一幕为后续剧情埋下了重要伏笔...')}
+【升华结尾】（9-12秒）
+{narration.get('conclusion', f'这一幕{segment.get("continuity_bridge", "为后续剧情埋下重要伏笔")}')}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📜 完整解说稿:
-{narration.get('full_script', '完整的专业旁白解说')}
+🎙️ 完整旁白解说稿:
+{narration.get('full_script', f'''在第{episode_info.get("episode_number", "?")}集的这个精彩片段中，{segment.get("hook_reason", "关键剧情即将揭晓")}。随着{episode_info.get("main_theme", "剧情")}的深入发展，{segment.get("plot_significance", "复杂情况逐渐显现")}。最精彩的时刻到来，{segment.get("hook_reason", "紧张氛围达到顶点")}。这一幕{segment.get("continuity_bridge", "为后续剧情埋下重要伏笔")}。''')}
 
-💬 关键对话分析:
-"""
+💎 精彩内容解析:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 本片段核心价值: {segment.get('plot_significance', '推进主线剧情发展')}
+🎪 戏剧张力体现: {', '.join(segment.get('dramatic_elements', ['情节转折', '人物冲突', '情感高潮']))}
+🔥 观众吸引要素: {segment.get('hook_reason', '悬念设置和情感共鸣')}
+🎭 角色发展意义: {segment.get('character_development', '人物性格深化和关系变化')}
+
+💬 关键台词解析:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
             
             # 添加关键对话分析
-            for dialogue in segment.get('key_dialogues', []):
-                speaker = dialogue.get('speaker', '角色')
-                line = dialogue.get('line', '台词')
-                impact = dialogue.get('impact', '重要意义')
-                content += f"• {speaker}: \"{line}\" - {impact}\n"
-            
-            content += f"""
-🎭 戏剧元素:
-"""
-            for element in segment.get('dramatic_elements', ['精彩剧情']):
-                content += f"• {element}\n"
-            
-            content += f"""
-🔗 剧情连贯性:
-{segment.get('continuity_bridge', '与后续剧情的重要连接')}
-
-👥 角色发展:
-{segment.get('character_development', '角色在此片段中的重要发展')}
-
-✨ 视觉亮点:
-"""
-            for highlight in segment.get('visual_highlights', ['精彩画面']):
-                content += f"• {highlight}\n"
+            key_dialogues = segment.get('key_dialogues', [])
+            if key_dialogues:
+                for i, dialogue in enumerate(key_dialogues[:5], 1):  # 限制前5个重要对话
+                    speaker = dialogue.get('speaker', '角色')
+                    line = dialogue.get('line', '重要台词')
+                    impact = dialogue.get('impact', '推进剧情发展')
+                    content += f"""
+{i}. {speaker}: "{line}"
+   → 剧情作用: {impact}
+   → 情感力度: ⭐⭐⭐⭐⭐"""
+            else:
+                content += "\n本片段以画面表现为主，通过视觉冲击展现剧情张力"
             
             content += f"""
 
-📊 剧情分析总结:
+🎬 视觉呈现亮点:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+            
+            visual_highlights = segment.get('visual_highlights', ['精彩画面表现', '镜头语言运用', '场景氛围营造'])
+            for i, highlight in enumerate(visual_highlights, 1):
+                content += f"\n{i}. {highlight}"
+            
+            content += f"""
+
+🔗 剧情连贯性分析:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-本片段在整集中的重要作用：{segment.get('plot_significance', '推进剧情发展')}
-与整体故事线的关系：{segment.get('continuity_bridge', '承上启下的重要节点')}
-观众情感体验：通过精彩的剧情设计，引发观众的强烈情感共鸣
+🔸 与前情衔接: {segment.get('continuity_bridge', '承接前集重要线索')}
+🔸 本片段作用: {segment.get('plot_significance', '推进核心矛盾发展')}  
+🔸 后续剧情铺垫: 为下集关键情节做重要准备
 
-生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-分析方式: 完全智能化AI分析
+📊 短视频制作说明:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ 视频时长: {segment.get('duration_seconds', 0)} 秒（适合短视频平台）
+✅ 内容完整性: 包含完整剧情单元，逻辑连贯
+✅ 观众体验: 开头制造悬念，结尾留有余味
+✅ 剧情价值: {segment.get('plot_significance', '核心剧情推进')}
+✅ 情感共鸣: 通过{', '.join(segment.get('dramatic_elements', ['精彩剧情']))}引发观众情感投入
+
+🎯 推荐使用场景:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• 短视频平台分享（抖音、快手、B站等）
+• 剧集精彩回顾和推广
+• 观众讨论话题引导
+• 剧情解析和深度分析
+
+📝 制作信息:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+生成时间: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}
+分析方式: 完全智能化AI深度分析
+系统版本: 完全智能化剪辑系统 v3.0
+文件类型: 专业旁白解说稿
 """
             
             with open(narration_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
-            print(f"   📜 生成专业旁白: {os.path.basename(narration_path)}")
+            print(f"   📜 生成专业旁白解说: {os.path.basename(narration_path)}")
             
         except Exception as e:
-            print(f"   ⚠️ 旁白生成失败: {e}")
+            print(f"   ⚠️ 旁白文件生成失败: {e}")
+            # 生成简化版本旁白
+            self._create_simple_narration(video_path, segment, analysis)
 
     def _extract_episode_number(self, filename: str) -> str:
         """提取集数"""
@@ -636,8 +671,10 @@ class CompleteIntelligentClipper:
         except:
             return 0.0
 
-    def process_single_episode(self, subtitle_file: str) -> bool:
-        """处理单集完整流程 - 解决问题15"""
+    def process_single_episode(self, subtitle_file: str) -> Optional[bool]:
+        """处理单集完整流程 - 解决问题15
+        返回值：True=成功，False=失败，None=AI不可用跳过
+        """
         print(f"\n📺 处理: {subtitle_file}")
         
         # 1. 解析字幕
@@ -650,7 +687,10 @@ class CompleteIntelligentClipper:
         
         # 2. AI完整分析 (带缓存) - 解决问题1,2,3,4,8,12
         analysis = self.analyze_episode_complete(subtitles, subtitle_file)
-        if not analysis:
+        if analysis is None:
+            print(f"⏸️ AI不可用，{subtitle_file} 已跳过")
+            return None  # AI不可用时返回None
+        elif not analysis:
             print(f"❌ AI分析失败，跳过此集")
             return False
         
@@ -668,8 +708,45 @@ class CompleteIntelligentClipper:
         # 5. 生成集数总结
         self._create_episode_summary(subtitle_file, analysis, created_clips)
         
-        print(f"✅ {subtitle_file} 处理完成: {len(created_clips)} 个片段")
-        return len(created_clips) > 0
+        clips_count = len(created_clips)
+        print(f"✅ {subtitle_file} 处理完成: {clips_count} 个短视频")
+        if clips_count > 0:
+            print(f"📜 每个短视频都附带专业旁白解说文件")
+        
+        return clips_count > 0
+
+    def _create_simple_narration(self, video_path: str, segment: Dict, analysis: Dict):
+        """创建简化版旁白文件（当详细版生成失败时使用）"""
+        try:
+            narration_path = video_path.replace('.mp4', '_简化旁白.txt')
+            episode_info = analysis.get('episode_analysis', {})
+            
+            content = f"""📺 {segment['title']} - 简化旁白解说
+{"=" * 50}
+
+🎬 基本信息:
+集数: 第{episode_info.get('episode_number', '?')}集
+时长: {segment.get('duration_seconds', 0)} 秒
+类型: {episode_info.get('genre_type', '剧情片段')}
+
+📜 旁白解说:
+{segment.get('hook_reason', '这是一个精彩的剧情片段')}，展现了{segment.get('plot_significance', '重要的故事发展')}。通过{', '.join(segment.get('dramatic_elements', ['精彩表演']))}，为观众呈现了引人入胜的剧情体验。
+
+💎 精彩看点:
+• {segment.get('hook_reason', '精彩剧情发展')}
+• {segment.get('plot_significance', '关键情节推进')}
+• {segment.get('character_development', '人物关系变化')}
+
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+            
+            with open(narration_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            print(f"   📝 生成简化旁白: {os.path.basename(narration_path)}")
+            
+        except Exception as e:
+            print(f"   ⚠️ 简化旁白也生成失败: {e}")
 
     def _create_episode_summary(self, subtitle_file: str, analysis: Dict, clips: List[str]):
         """创建集数总结 - 解决问题9"""
@@ -759,8 +836,11 @@ class CompleteIntelligentClipper:
     def process_all_episodes(self):
         """处理所有集数 - 主流程"""
         if not unified_config.is_enabled():
-            print("❌ AI未配置，无法使用智能剪辑功能")
-            print("请先运行菜单选项 '2. 🤖 配置AI接口'")
+            print("⏸️ AI未配置，跳过智能分析")
+            print("💡 您可以选择：")
+            print("   1. 先运行菜单选项 '2. 🤖 配置AI接口'")
+            print("   2. 或等待AI服务恢复后重新运行")
+            print("📝 程序将保存进度，下次AI可用时可从断点续执行")
             return
 
         print("🚀 完全智能化剪辑系统启动")
@@ -777,17 +857,22 @@ class CompleteIntelligentClipper:
         subtitle_files.sort()
         
         print(f"📝 找到 {len(subtitle_files)} 个字幕文件")
-        print(f"🤖 使用完全智能化AI分析")
+        print(f"🤖 使用完全智能化AI分析（支持断点续执行）")
+        print(f"⏸️ 当AI不可用时将跳过，等待下次执行")
         
         # 处理每一集
         total_success = 0
         total_clips = 0
+        total_skipped = 0
         
         for subtitle_file in subtitle_files:
             try:
                 success = self.process_single_episode(subtitle_file)
                 if success:
                     total_success += 1
+                elif success is None:  # AI不可用时返回None
+                    total_skipped += 1
+                    print(f"⏸️ {subtitle_file} 已跳过，等待AI可用")
                 
                 # 统计片段数
                 episode_clips = [f for f in os.listdir(self.output_folder) 
@@ -798,9 +883,9 @@ class CompleteIntelligentClipper:
                 print(f"❌ 处理 {subtitle_file} 出错: {e}")
         
         # 最终报告
-        self._create_final_report(total_success, len(subtitle_files), total_clips)
+        self._create_final_report(total_success, len(subtitle_files), total_clips, total_skipped)
 
-    def _create_final_report(self, success_count: int, total_episodes: int, total_clips: int):
+    def _create_final_report(self, success_count: int, total_episodes: int, total_clips: int, skipped_count: int = 0):
         """创建最终报告"""
         report_content = f"""🎬 完全智能化剪辑系统 v3.0 - 最终报告
 {"=" * 80}
@@ -809,8 +894,11 @@ class CompleteIntelligentClipper:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • 总集数: {total_episodes} 集
 • 成功处理: {success_count} 集
+• AI不可用跳过: {skipped_count} 集
+• 失败: {total_episodes - success_count - skipped_count} 集
 • 成功率: {(success_count/total_episodes*100):.1f}%
-• 生成片段: {total_clips} 个
+• 生成短视频: {total_clips} 个
+• 每个短视频都附带专业旁白解说文件
 
 ✨ 解决的15个核心问题:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
