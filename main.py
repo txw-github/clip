@@ -617,7 +617,7 @@ class UnifiedTVClipper:
         return created_clips
 
     def _create_single_clip(self, video_file: str, segment: Dict, output_path: str) -> bool:
-        """创建单个视频片段"""
+        """创建单个视频片段 - Windows兼容版本"""
         try:
             start_time = segment['start_time']
             end_time = segment['end_time']
@@ -638,37 +638,90 @@ class UnifiedTVClipper:
             buffer_start = max(0, start_seconds - 2)
             buffer_duration = duration + 4
             
-            # 检查ffmpeg
+            # 检查ffmpeg - Windows兼容
+            ffmpeg_cmd = 'ffmpeg'
             try:
-                subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
-            except (subprocess.CalledProcessError, FileNotFoundError):
+                # Windows下可能需要指定.exe
+                test_result = subprocess.run([ffmpeg_cmd, '-version'], 
+                                           capture_output=True, text=True, timeout=10)
+                if test_result.returncode != 0:
+                    ffmpeg_cmd = 'ffmpeg.exe'
+                    test_result = subprocess.run([ffmpeg_cmd, '-version'], 
+                                               capture_output=True, text=True, timeout=10)
+            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                 print(f"   ❌ ffmpeg未安装或不可用")
+                print(f"   💡 请安装ffmpeg: https://ffmpeg.org/download.html")
                 return False
             
-            # FFmpeg命令
+            # Windows路径处理
+            video_file = os.path.abspath(video_file)
+            output_path = os.path.abspath(output_path)
+            
+            # FFmpeg命令 - Windows优化
             cmd = [
-                'ffmpeg',
+                ffmpeg_cmd,
+                '-hide_banner',  # 减少输出
+                '-loglevel', 'error',  # 只显示错误
                 '-i', video_file,
                 '-ss', str(buffer_start),
                 '-t', str(buffer_duration),
                 '-c:v', 'libx264',
                 '-c:a', 'aac',
-                '-preset', 'medium',
-                '-crf', '23',
+                '-preset', 'ultrafast',  # 更快的预设
+                '-crf', '28',  # 稍微降低质量以提高速度
+                '-avoid_negative_ts', 'make_zero',  # 避免时间戳问题
                 output_path,
                 '-y'
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            # Windows下使用不同的subprocess调用方式
+            import sys
+            if sys.platform.startswith('win'):
+                # Windows下使用shell=True可以避免一些线程问题
+                cmd_str = ' '.join([f'"{arg}"' if ' ' in arg else arg for arg in cmd])
+                process = subprocess.Popen(
+                    cmd_str,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                )
+                
+                # 设置超时并等待完成
+                try:
+                    stdout, stderr = process.communicate(timeout=300)
+                    returncode = process.returncode
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    print(f"   ❌ 超时: 剪辑时间过长")
+                    return False
+            else:
+                # 非Windows系统使用原来的方式
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                returncode = result.returncode
+                stderr = result.stderr
             
-            if result.returncode == 0 and os.path.exists(output_path):
+            # 检查结果
+            if returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
                 file_size = os.path.getsize(output_path) / (1024*1024)
                 print(f"   ✅ 成功: {file_size:.1f}MB")
                 return True
             else:
-                print(f"   ❌ 失败: {result.stderr[:100] if result.stderr else '未知错误'}")
+                error_msg = stderr[:200] if stderr else '未知错误'
+                print(f"   ❌ 失败: {error_msg}")
+                
+                # 删除失败的空文件
+                if os.path.exists(output_path) and os.path.getsize(output_path) == 0:
+                    try:
+                        os.remove(output_path)
+                    except:
+                        pass
                 return False
                 
+        except subprocess.TimeoutExpired:
+            print(f"   ❌ 剪辑超时")
+            return False
         except Exception as e:
             print(f"   ❌ 剪辑异常: {e}")
             return False
