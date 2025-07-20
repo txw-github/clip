@@ -8,7 +8,28 @@
 
 import os
 import sys
-import json
+
+def main():
+    """主程序入口"""
+    print("🚀 电视剧智能剪辑系统")
+    print("=" * 50)
+    
+    # 检查是否存在AI智能剪辑器
+    if os.path.exists('intelligent_ai_clipper.py'):
+        print("🤖 启动AI智能剪辑系统...")
+        try:
+            from intelligent_ai_clipper import main as ai_main
+            ai_main()
+        except Exception as e:
+            print(f"❌ AI系统启动失败: {e}")
+            print("尝试使用备用启动脚本...")
+            os.system("python start_ai_clipper.py")
+    else:
+        print("❌ 未找到AI智能剪辑器")
+        print("请确保 intelligent_ai_clipper.py 文件存在")
+
+if __name__ == "__main__":
+    main()t json
 import requests
 from typing import List, Dict, Optional
 

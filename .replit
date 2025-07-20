@@ -18,7 +18,7 @@ args = "python setup_directories.py"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python main.py"
+args = "python start_ai_clipper.py"
 
 [deployment]
 run = ["sh", "-c", "python main.py"]
