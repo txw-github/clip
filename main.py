@@ -9,6 +9,7 @@
 import os
 import json
 import glob
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 from api_config_helper import config_helper
 
@@ -91,33 +92,61 @@ class TVClipperMain:
 
     def analyze_subtitles(self):
         """分析字幕文件"""
-        # 查找字幕文件
-        srt_files = glob.glob("srt/*.srt")
+        # 查找字幕文件 - 支持.txt和.srt格式
+        srt_files = glob.glob("srt/*.srt") + glob.glob("srt/*.txt")
 
         if not srt_files:
             print("❌ 未找到字幕文件")
-            print("💡 请将字幕文件(.srt)放在 srt/ 目录下")
+            print("💡 请将字幕文件(.srt或.txt)放在 srt/ 目录下")
             return
 
         print(f"\n📄 找到 {len(srt_files)} 个字幕文件:")
-        for i, file_path in enumerate(srt_files, 1):
+        
+        # 检查已分析的文件
+        analyzed_files = []
+        pending_files = []
+        
+        for file_path in srt_files:
             filename = os.path.basename(file_path)
-            print(f"{i}. {filename}")
+            cache_name = os.path.splitext(filename)[0] + '.json'
+            cache_path = os.path.join('analysis_cache', cache_name)
+            
+            if os.path.exists(cache_path):
+                analyzed_files.append((file_path, True))
+                print(f"✅ {filename} (已分析)")
+            else:
+                pending_files.append((file_path, False))
+                print(f"⏳ {filename} (待分析)")
 
-        print(f"{len(srt_files) + 1}. 分析所有文件")
+        if analyzed_files:
+            print(f"\n📊 状态统计:")
+            print(f"   已分析: {len(analyzed_files)} 个文件")
+            print(f"   待分析: {len(pending_files)} 个文件")
+
+        print(f"\n📋 分析选项:")
+        print(f"1. 🔄 分析所有文件 (跳过已分析的)")
+        print(f"2. 🆕 重新分析所有文件 (覆盖已有结果)")
+        print(f"3. ⚡ 只分析未完成的文件")
 
         while True:
             try:
-                choice = input(f"\n请选择要分析的文件 (1-{len(srt_files) + 1}): ").strip()
+                choice = input(f"\n请选择分析模式 (1-3): ").strip()
                 choice = int(choice)
 
-                if 1 <= choice <= len(srt_files):
-                    # 分析单个文件
-                    self._analyze_single_file(srt_files[choice - 1])
+                if choice == 1:
+                    # 智能分析 - 跳过已分析的
+                    self._analyze_all_files_smart(srt_files, skip_analyzed=True)
                     break
-                elif choice == len(srt_files) + 1:
-                    # 分析所有文件
-                    self._analyze_all_files(srt_files)
+                elif choice == 2:
+                    # 重新分析所有
+                    self._analyze_all_files_smart(srt_files, skip_analyzed=False)
+                    break
+                elif choice == 3:
+                    # 只分析待分析的
+                    if pending_files:
+                        self._analyze_all_files_smart([f[0] for f in pending_files], skip_analyzed=False)
+                    else:
+                        print("✅ 所有文件都已分析完成")
                     break
                 else:
                     print("❌ 无效选择")
@@ -139,31 +168,96 @@ class TVClipperMain:
         else:
             print("❌ 分析失败")
 
-    def _analyze_all_files(self, srt_files: List[str]):
-        """分析所有字幕文件"""
-        #from subtitle_analyzer import SubtitleAnalyzer
-
-        print(f"\n🔍 开始批量分析 {len(srt_files)} 个文件...")
+    def _analyze_all_files_smart(self, srt_files: List[str], skip_analyzed: bool = True):
+        """智能批量分析所有字幕文件 - 保证一致性"""
+        print(f"\n🔍 开始智能批量分析 {len(srt_files)} 个文件...")
+        print(f"📋 模式: {'跳过已分析' if skip_analyzed else '重新分析所有'}")
 
         analyzer = SubtitleAnalyzer(self.ai_config)
         all_results = []
+        skipped_count = 0
+        success_count = 0
+        error_count = 0
 
         for i, file_path in enumerate(srt_files, 1):
             filename = os.path.basename(file_path)
-            print(f"\n[{i}/{len(srt_files)}] 分析: {filename}")
+            cache_name = os.path.splitext(filename)[0] + '.json'
+            cache_path = os.path.join('analysis_cache', cache_name)
 
-            result = analyzer.analyze_episode(file_path)
+            print(f"\n[{i}/{len(srt_files)}] 处理: {filename}")
 
-            if result:
-                all_results.append(result)
-                print(f"✅ 完成，识别到 {len(result.get('clips', []))} 个片段")
-            else:
-                print("❌ 分析失败")
+            # 检查是否已存在分析结果
+            if skip_analyzed and os.path.exists(cache_path):
+                try:
+                    with open(cache_path, 'r', encoding='utf-8') as f:
+                        cached_result = json.load(f)
+                    
+                    all_results.append(cached_result)
+                    skipped_count += 1
+                    print(f"⏩ 跳过已分析 (已有 {len(cached_result.get('clips', []))} 个片段)")
+                    continue
+                except Exception as e:
+                    print(f"⚠️ 缓存文件损坏，重新分析: {e}")
 
+            # 执行分析
+            try:
+                result = analyzer.analyze_episode(file_path)
+
+                if result and 'clips' in result:
+                    # 保存分析结果到缓存
+                    with open(cache_path, 'w', encoding='utf-8') as f:
+                        json.dump(result, f, ensure_ascii=False, indent=2)
+                    
+                    all_results.append(result)
+                    success_count += 1
+                    print(f"✅ 分析完成，识别到 {len(result.get('clips', []))} 个精彩片段")
+                    print(f"💾 结果已缓存到: {cache_name}")
+                else:
+                    error_count += 1
+                    print("❌ 分析失败 - 未识别到有效片段")
+
+            except Exception as e:
+                error_count += 1
+                print(f"❌ 分析出错: {e}")
+
+        # 统计结果
         print(f"\n📊 批量分析完成:")
-        print(f"   成功分析: {len(all_results)} 个文件")
+        print(f"   总文件数: {len(srt_files)} 个")
+        print(f"   跳过已分析: {skipped_count} 个")
+        print(f"   新分析成功: {success_count} 个")
+        print(f"   分析失败: {error_count} 个")
+        
         total_clips = sum(len(r.get('clips', [])) for r in all_results)
-        print(f"   总计识别: {total_clips} 个精彩片段")
+        print(f"   总计精彩片段: {total_clips} 个")
+
+        if all_results:
+            self._generate_batch_summary(all_results)
+
+    def _generate_batch_summary(self, results: List[Dict]):
+        """生成批量分析汇总报告"""
+        summary_path = os.path.join('analysis_cache', 'batch_summary.json')
+        
+        summary = {
+            'timestamp': datetime.now().isoformat(),
+            'total_episodes': len(results),
+            'total_clips': sum(len(r.get('clips', [])) for r in results),
+            'episodes': []
+        }
+
+        for result in results:
+            episode_info = {
+                'filename': result.get('episode', 'unknown'),
+                'clips_count': len(result.get('clips', [])),
+                'total_duration': sum(clip.get('duration', 0) for clip in result.get('clips', [])),
+                'theme': result.get('theme', 'unknown')
+            }
+            summary['episodes'].append(episode_info)
+
+        # 保存汇总
+        with open(summary_path, 'w', encoding='utf-8') as f:
+            json.dump(summary, f, ensure_ascii=False, indent=2)
+
+        print(f"📋 批量汇总已保存: analysis_cache/batch_summary.json")
 
     def _show_analysis_summary(self, result: Dict[str, Any]):
         """显示分析摘要"""
@@ -184,8 +278,9 @@ class TVClipperMain:
 
     def clip_videos(self):
         """剪辑视频"""
-        # 检查是否有分析结果
-        cache_files = glob.glob("analysis_cache/*.json")
+        # 检查是否有分析结果 (排除汇总文件)
+        cache_files = [f for f in glob.glob("analysis_cache/*.json") 
+                      if not f.endswith('batch_summary.json')]
 
         if not cache_files:
             print("❌ 未找到分析结果")
@@ -205,22 +300,55 @@ class TVClipperMain:
         print(f"\n📹 找到 {len(video_files)} 个视频文件")
         print(f"📄 找到 {len(cache_files)} 个分析结果")
 
-        # 开始剪辑流程
-        #from video_clipper import VideoClipper
+        # 检查已剪辑的视频
+        clipped_files = glob.glob("clips/*.mp4")
+        already_clipped = set()
+        for clip_file in clipped_files:
+            # 从剪辑文件名提取原始集数
+            basename = os.path.basename(clip_file)
+            if basename.startswith('E') or 'S01E' in basename:
+                already_clipped.add(basename.split('_')[0])
+
+        print(f"✂️ 已剪辑: {len(already_clipped)} 个集数")
 
         clipper = VideoClipper()
+        success_count = 0
+        skip_count = 0
+        error_count = 0
 
         for cache_file in cache_files:
             episode_name = os.path.splitext(os.path.basename(cache_file))[0]
+            
+            # 检查是否已剪辑
+            episode_prefix = episode_name.replace('_4K_60fps', '').replace('S01', '')
+            if any(episode_prefix in clipped for clipped in already_clipped):
+                print(f"\n⏩ 跳过已剪辑: {episode_name}")
+                skip_count += 1
+                continue
 
             # 查找对应的视频文件
             matching_video = self._find_matching_video(episode_name, video_files)
 
             if matching_video:
                 print(f"\n✂️ 剪辑 {episode_name}")
-                clipper.clip_episode(cache_file, matching_video)
+                try:
+                    if clipper.clip_episode(cache_file, matching_video):
+                        success_count += 1
+                        print(f"✅ 剪辑完成: {episode_name}")
+                    else:
+                        error_count += 1
+                        print(f"❌ 剪辑失败: {episode_name}")
+                except Exception as e:
+                    error_count += 1
+                    print(f"❌ 剪辑出错: {episode_name} - {e}")
             else:
+                error_count += 1
                 print(f"⚠️ 未找到 {episode_name} 对应的视频文件")
+
+        print(f"\n📊 剪辑任务完成:")
+        print(f"   成功剪辑: {success_count} 个")
+        print(f"   跳过已有: {skip_count} 个") 
+        print(f"   失败/错误: {error_count} 个")
 
     def _find_matching_video(self, episode_name: str, video_files: List[str]) -> Optional[str]:
         """查找匹配的视频文件"""
