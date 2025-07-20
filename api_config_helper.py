@@ -1,8 +1,9 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
-AI API配置助手 - 简化版本
+AI API配置助手 - 重构版本
 """
 
 import os
@@ -16,8 +17,20 @@ class SimpleAPIHelper:
     def __init__(self):
         self.config_file = '.ai_config.json'
 
-        # 支持的AI模型
+        # 支持的AI模型配置
         self.ai_models = {
+            'openai': {
+                'name': 'OpenAI GPT',
+                'official': {
+                    'base_url': 'https://api.openai.com/v1',
+                    'models': ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'],
+                    'default_model': 'gpt-4o-mini'
+                },
+                'proxy': {
+                    'models': ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'],
+                    'default_model': 'gpt-4o-mini'
+                }
+            },
             'gemini': {
                 'name': 'Google Gemini',
                 'official': {
@@ -26,74 +39,53 @@ class SimpleAPIHelper:
                     'default_model': 'gemini-2.5-flash'
                 },
                 'proxy': {
-                    'type': 'openai_compatible',
                     'models': ['gemini-2.5-pro', 'gemini-2.0-flash-thinking-exp'],
                     'default_model': 'gemini-2.5-pro'
-                }
-            },
-            'openai': {
-                'name': 'OpenAI GPT',
-                'official': {
-                    'type': 'openai_official',
-                    'models': ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'],
-                    'default_model': 'gpt-4o-mini',
-                    'base_url': 'https://api.openai.com/v1'
-                },
-                'proxy': {
-                    'type': 'openai_compatible', 
-                    'models': ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'],
-                    'default_model': 'gpt-4o-mini'
                 }
             },
             'deepseek': {
                 'name': 'DeepSeek',
                 'official': {
-                    'type': 'openai_compatible',
+                    'base_url': 'https://api.deepseek.com/v1',
                     'models': ['deepseek-r1', 'deepseek-v3', 'deepseek-chat'],
-                    'default_model': 'deepseek-r1',
-                    'base_url': 'https://api.deepseek.com/v1'
+                    'default_model': 'deepseek-r1'
                 },
                 'proxy': {
-                    'type': 'openai_compatible',
                     'models': ['deepseek-r1', 'deepseek-v3', 'deepseek-chat'],
                     'default_model': 'deepseek-r1'
                 }
             },
             'claude': {
                 'name': 'Anthropic Claude',
-                'official': None,  # 不支持官方API
+                'official': None,  # 不支持官方
                 'proxy': {
-                    'type': 'openai_compatible',
                     'models': ['claude-3.5-sonnet', 'claude-3-opus'],
                     'default_model': 'claude-3.5-sonnet'
                 }
             }
         }
 
-        # 推荐的中转服务商
+        # 中转服务商配置
         self.proxy_providers = {
             'chataiapi': {
                 'name': 'ChatAI API (推荐)',
-                'base_url': 'https://www.chataiapi.com/v1',
-                'headers': {}
+                'base_url': 'https://www.chataiapi.com/v1'
             },
             'openrouter': {
                 'name': 'OpenRouter',
                 'base_url': 'https://openrouter.ai/api/v1',
-                'headers': {
+                'extra_headers': {
                     'HTTP-Referer': 'https://replit.com',
                     'X-Title': 'TV-Clipper-AI'
                 }
             },
             'suanli': {
                 'name': '算力云',
-                'base_url': 'https://api.suanli.cn/v1',
-                'headers': {}
+                'base_url': 'https://api.suanli.cn/v1'
             },
             'custom': {
                 'name': '自定义中转商',
-                'base_url': '',
-                'headers': {}
+                'base_url': ''
             }
         }
 
@@ -102,8 +94,8 @@ class SimpleAPIHelper:
         print("🤖 AI分析配置")
         print("=" * 40)
 
-        # 第一步：选择AI模型
-        print("请选择AI模型:")
+        # 第一步：选择模型类型
+        print("第一步：选择AI模型类型")
         model_keys = list(self.ai_models.keys())
         for i, (key, info) in enumerate(self.ai_models.items(), 1):
             print(f"{i}. {info['name']}")
@@ -111,13 +103,13 @@ class SimpleAPIHelper:
 
         while True:
             try:
-                choice = input(f"\n请选择 (0-{len(model_keys)}): ").strip()
+                choice = input(f"\n请选择模型类型 (0-{len(model_keys)}): ").strip()
                 if choice == "0":
                     return {'enabled': False, 'provider': 'none'}
 
                 choice = int(choice)
                 if 1 <= choice <= len(model_keys):
-                    selected_model = model_keys[choice - 1]
+                    selected_model_type = model_keys[choice - 1]
                     break
                 else:
                     print("❌ 无效选择")
@@ -125,53 +117,52 @@ class SimpleAPIHelper:
                 print("❌ 请输入数字")
 
         # 第二步：选择官方或中转
-        model_info = self.ai_models[selected_model]
-        print(f"\n配置 {model_info['name']}:")
+        model_info = self.ai_models[selected_model_type]
+        print(f"\n第二步：选择 {model_info['name']} 的接口类型")
 
-        options = []
+        api_type_options = []
         if model_info['official']:
-            options.append(('official', '官方API'))
-        options.append(('proxy', '中转API'))
+            api_type_options.append(('official', '官方API'))
+        api_type_options.append(('proxy', '中转API'))
 
-        for i, (key, name) in enumerate(options, 1):
+        for i, (key, name) in enumerate(api_type_options, 1):
             print(f"{i}. {name}")
 
         while True:
             try:
-                choice = input(f"请选择 (1-{len(options)}): ").strip()
+                choice = input(f"请选择接口类型 (1-{len(api_type_options)}): ").strip()
                 choice = int(choice)
-                if 1 <= choice <= len(options):
-                    api_type = options[choice - 1][0]
+                if 1 <= choice <= len(api_type_options):
+                    api_type = api_type_options[choice - 1][0]
                     break
                 else:
                     print("❌ 无效选择")
             except ValueError:
                 print("❌ 请输入数字")
 
-        # 配置具体参数
+        # 第三步：具体配置
         if api_type == 'official':
-            return self._configure_official_api(selected_model)
+            return self._configure_official_api(selected_model_type)
         else:
-            return self._configure_proxy_api(selected_model)
+            return self._configure_proxy_api(selected_model_type)
 
-    def _configure_official_api(self, model_name: str) -> Dict[str, Any]:
+    def _configure_official_api(self, model_type: str) -> Dict[str, Any]:
         """配置官方API"""
-        model_config = self.ai_models[model_name]['official']
-
-        print(f"\n🏢 配置 {self.ai_models[model_name]['name']} 官方API")
-        print("注意：官方API需要魔法上网")
-
+        model_config = self.ai_models[model_type]['official']
+        
+        print(f"\n第三步：配置 {self.ai_models[model_type]['name']} 官方API")
+        
         # 获取API密钥
-        api_key = input("\n请输入API密钥: ").strip()
+        api_key = input("请输入API密钥: ").strip()
         if not api_key:
             print("❌ API密钥不能为空")
             return {'enabled': False}
 
-        # 选择模型
+        # 选择具体模型
         models = model_config['models']
-        print(f"\n可用模型:")
+        print(f"\n第四步：选择具体模型")
         for i, model in enumerate(models, 1):
-            mark = " ⭐ 推荐" if model == model_config['default_model'] else ""
+            mark = " (推荐)" if model == model_config['default_model'] else ""
             print(f"{i}. {model}{mark}")
 
         while True:
@@ -193,14 +184,16 @@ class SimpleAPIHelper:
         # 构建配置
         config = {
             'enabled': True,
-            'api_type': model_config['type'],
-            'model_provider': model_name,
+            'api_type': 'official',
+            'model_provider': model_type,
             'api_key': api_key,
             'model': selected_model
         }
 
-        # 添加base_url（如果需要）
-        if 'base_url' in model_config:
+        # 添加特定配置
+        if model_type == 'gemini':
+            config['api_type'] = 'gemini_official'
+        else:
             config['base_url'] = model_config['base_url']
 
         # 测试连接
@@ -212,11 +205,11 @@ class SimpleAPIHelper:
             print("❌ API连接失败")
             return {'enabled': False}
 
-    def _configure_proxy_api(self, model_name: str) -> Dict[str, Any]:
+    def _configure_proxy_api(self, model_type: str) -> Dict[str, Any]:
         """配置中转API"""
-        model_config = self.ai_models[model_name]['proxy']
-
-        print(f"\n🌐 配置 {self.ai_models[model_name]['name']} 中转API")
+        model_config = self.ai_models[model_type]['proxy']
+        
+        print(f"\n第三步：配置 {self.ai_models[model_type]['name']} 中转API")
 
         # 选择中转服务商
         print("选择中转服务商:")
@@ -226,7 +219,7 @@ class SimpleAPIHelper:
 
         while True:
             try:
-                choice = input(f"请选择 (1-{len(providers)}): ").strip()
+                choice = input(f"请选择中转商 (1-{len(providers)}): ").strip()
                 choice = int(choice)
                 if 1 <= choice <= len(providers):
                     provider_key = providers[choice - 1]
@@ -254,11 +247,11 @@ class SimpleAPIHelper:
             print("❌ API密钥不能为空")
             return {'enabled': False}
 
-        # 选择模型
+        # 选择具体模型
         models = model_config['models']
-        print(f"\n可用模型:")
+        print(f"\n第四步：选择具体模型")
         for i, model in enumerate(models, 1):
-            mark = " ⭐ 推荐" if model == model_config['default_model'] else ""
+            mark = " (推荐)" if model == model_config['default_model'] else ""
             print(f"{i}. {model}{mark}")
 
         while True:
@@ -280,13 +273,13 @@ class SimpleAPIHelper:
         # 构建配置
         config = {
             'enabled': True,
-            'api_type': model_config['type'],
-            'model_provider': model_name,
+            'api_type': 'proxy',
+            'model_provider': model_type,
             'proxy_provider': provider_key,
             'api_key': api_key,
             'base_url': base_url,
             'model': selected_model,
-            'extra_headers': provider_info['headers']
+            'extra_headers': provider_info.get('extra_headers', {})
         }
 
         # 测试连接
@@ -305,7 +298,7 @@ class SimpleAPIHelper:
 
             if api_type == 'gemini_official':
                 return self._test_gemini_official(config)
-            elif api_type in ['openai_official', 'openai_compatible']:
+            elif api_type in ['official', 'proxy']:
                 return self._test_openai_compatible(config)
             else:
                 return False
@@ -372,7 +365,7 @@ class SimpleAPIHelper:
 
             if api_type == 'gemini_official':
                 return self._call_gemini_official(prompt, config)
-            elif api_type in ['openai_official', 'openai_compatible']:
+            elif api_type in ['official', 'proxy']:
                 return self._call_openai_compatible(prompt, config)
             else:
                 return None
@@ -429,13 +422,10 @@ class SimpleAPIHelper:
             return None
 
     def _extract_episode_number(self, filename: str) -> str:
-        """从SRT文件名提取集数"""
-        # 提取数字部分作为集数
-        numbers = re.findall(r'\d+', filename)
-        if numbers:
-            # 取最后一个数字作为集数（通常是最相关的）
-            return numbers[-1].zfill(2)
-        return "00"
+        """从SRT文件名提取集数，使用字符串排序"""
+        # 直接使用文件名（去掉扩展名）作为集数标识
+        base_name = os.path.splitext(filename)[0]
+        return base_name
 
     def load_config(self) -> Dict[str, Any]:
         """加载配置"""
@@ -452,7 +442,7 @@ class SimpleAPIHelper:
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
-            print(f"✅ 配置已保存")
+            print(f"✅ 配置已保存到 {self.config_file}")
         except Exception as e:
             print(f"⚠ 保存配置失败: {e}")
 
