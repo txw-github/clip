@@ -4,7 +4,7 @@ modules = ["python-3.12"]
 channel = "stable-24_05"
 
 [workflows]
-runButton = "智能剪辑系统"
+runButton = "集成智能剪辑系统"
 
 [[workflows.workflow]]
 name = "运行智能剪辑系统"
@@ -72,6 +72,15 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "pip install -r requirements.txt"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"
+
+[[workflows.workflow]]
+name = "集成智能剪辑系统"
+author = 45269356
+mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
