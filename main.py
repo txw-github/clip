@@ -55,183 +55,33 @@ class UnifiedTVClipper:
         return {'enabled': False}
 
     def setup_ai_config(self) -> bool:
-        """一步式AI配置"""
-        print("\n🤖 AI智能分析配置")
-        print("=" * 40)
-        print("AI分析可以大幅提升剪辑效果，但不是必需的")
-        
-        enable = input("\n是否启用AI增强分析？(y/n): ").lower().strip()
-        
-        if enable not in ['y', 'yes', '是']:
-            config = {'enabled': False}
-            self._save_config(config)
-            print("✅ 已禁用AI，将使用基础规则分析")
-            return False
-        
-        print("\n请选择AI服务：")
-        print("1. 中转API (推荐，便宜稳定)")
-        print("2. OpenAI官方")
-        print("3. 自定义API")
-        
-        choice = input("\n请选择 (1-3): ").strip()
-        
-        if choice == "1":
-            return self._setup_proxy_api()
-        elif choice == "2":
-            return self._setup_openai()
-        elif choice == "3":
-            return self._setup_custom_api()
-        else:
-            print("❌ 无效选择")
-            return False
-
-    def _setup_proxy_api(self) -> bool:
-        """配置中转API"""
-        print("\n📝 配置中转API")
-        print("推荐使用：")
-        print("• https://api.chatanywhere.tech/v1")
-        print("• https://api.openai-proxy.org/v1")
-        print("• https://api.chataiapi.com/v1")
-        
-        base_url = input("\nAPI地址 (回车使用推荐): ").strip()
-        if not base_url:
-            base_url = "https://api.chatanywhere.tech/v1"
-        
-        api_key = input("API密钥: ").strip()
-        if not api_key:
-            print("❌ API密钥不能为空")
-            return False
-        
-        # 选择模型
-        print("\n选择模型：")
-        print("1. gpt-3.5-turbo (推荐，便宜)")
-        print("2. gpt-4")
-        print("3. claude-3-sonnet")
-        
-        model_choice = input("请选择 (1-3): ").strip()
-        models = {
-            '1': 'gpt-3.5-turbo',
-            '2': 'gpt-4',
-            '3': 'claude-3-sonnet-20240229'
-        }
-        model = models.get(model_choice, 'gpt-3.5-turbo')
-        
-        config = {
-            'enabled': True,
-            'provider': 'proxy',
-            'api_key': api_key,
-            'url': base_url,  # 使用原始的url字段
-            'model': model
-        }
-        
-        if self._test_api(config):
-            self.ai_config = config
-            self._save_config(config)
-            print("✅ AI配置成功！")
-            return True
-        else:
-            print("❌ API测试失败")
-            return False
-
-    def _setup_openai(self) -> bool:
-        """配置OpenAI官方"""
-        print("\n📝 配置OpenAI官方API")
-        api_key = input("OpenAI API密钥 (sk-开头): ").strip()
-        
-        if not api_key.startswith('sk-'):
-            print("❌ API密钥格式错误")
-            return False
-        
-        config = {
-            'enabled': True,
-            'provider': 'openai',
-            'api_key': api_key,
-            'url': 'https://api.openai.com/v1',  # 使用原始的url字段
-            'model': 'gpt-3.5-turbo'
-        }
-        
-        if self._test_api(config):
-            self.ai_config = config
-            self._save_config(config)
-            print("✅ OpenAI配置成功！")
-            return True
-        else:
-            print("❌ API测试失败")
-            return False
-
-    def _setup_custom_api(self) -> bool:
-        """配置自定义API"""
-        print("\n📝 配置自定义API")
-        
-        url = input("API地址: ").strip()
-        api_key = input("API密钥: ").strip()
-        model = input("模型名称: ").strip()
-        
-        if not all([url, api_key, model]):
-            print("❌ 所有字段都不能为空")
-            return False
-        
-        config = {
-            'enabled': True,
-            'provider': 'custom',
-            'api_key': api_key,
-            'url': url,  # 使用原始的url字段
-            'model': model
-        }
-        
-        if self._test_api(config):
-            self.ai_config = config
-            self._save_config(config)
-            print("✅ 自定义API配置成功！")
-            return True
-        else:
-            print("❌ API测试失败")
-            return False
-
-    def _test_api(self, config: Dict) -> bool:
-        """测试API连接"""
-        print("🔍 测试API连接...")
-        
+        """一步式AI配置 - 使用api_config_helper"""
         try:
-            headers = {
-                'Authorization': f'Bearer {config["api_key"]}',
-                'Content-Type': 'application/json'
-            }
+            # 导入API配置助手
+            from api_config_helper import config_helper
             
-            data = {
-                'model': config['model'],
-                'messages': [
-                    {'role': 'user', 'content': '测试连接，请回复"连接成功"'}
-                ],
-                'max_tokens': 10
-            }
+            print("\n🤖 AI智能分析配置")
+            print("=" * 40)
+            print("AI分析可以大幅提升剪辑效果，但不是必需的")
             
-            url = config.get('url', config.get('base_url', ''))
-            response = requests.post(
-                f"{url}/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=10
-            )
+            # 使用配置助手的交互式配置
+            config = config_helper.interactive_setup()
             
-            if response.status_code == 200:
-                print("✅ API连接正常")
+            if config.get('enabled', False):
+                self.ai_config = config
+                print("✅ AI配置成功！")
                 return True
             else:
-                print(f"❌ API调用失败: {response.status_code}")
+                self.ai_config = {'enabled': False}
+                print("✅ 已禁用AI，将使用基础规则分析")
                 return False
                 
         except Exception as e:
-            print(f"❌ 连接测试异常: {e}")
+            print(f"⚠️ AI配置失败: {e}")
+            self.ai_config = {'enabled': False}
             return False
 
-    def _save_config(self, config: Dict):
-        """保存配置"""
-        try:
-            with open('.ai_config.json', 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"⚠️ 配置保存失败: {e}")
+    
 
     def check_files(self) -> tuple:
         """检查文件状态"""
@@ -429,40 +279,20 @@ class UnifiedTVClipper:
         return '\n\n'.join(context_parts)
 
     def _call_ai_api(self, prompt: str) -> Optional[str]:
-        """调用AI API - 统一的原始方式"""
+        """调用AI API - 使用api_config_helper的统一方式"""
         try:
-            headers = {
-                'Authorization': f'Bearer {self.ai_config["api_key"]}',
-                'Content-Type': 'application/json'
-            }
+            # 导入API配置助手
+            from api_config_helper import config_helper
             
-            data = {
-                'model': self.ai_config.get('model', 'gpt-3.5-turbo'),
-                'messages': [
-                    {'role': 'system', 'content': '你是专业的电视剧剪辑师，擅长识别精彩片段和保持剧情连贯性。'},
-                    {'role': 'user', 'content': prompt}
-                ],
-                'max_tokens': 4000,
-                'temperature': 0.7
-            }
+            print(f"🤖 调用AI API: {self.ai_config.get('provider', '未知')}")
             
-            # 获取API地址 - 兼容url和base_url两种配置
-            api_url = self.ai_config.get('url', self.ai_config.get('base_url', ''))
+            # 使用配置助手调用API
+            response = config_helper.call_ai_api(prompt, self.ai_config)
             
-            print(f"🤖 调用AI API: {api_url}")
-            
-            response = requests.post(
-                f"{api_url}/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                return result.get('choices', [{}])[0].get('message', {}).get('content', '')
+            if response:
+                return response
             else:
-                print(f"⚠️ API调用失败: {response.status_code} - {response.text[:200]}")
+                print(f"⚠️ API调用失败")
                 
         except Exception as e:
             print(f"⚠️ API调用异常: {e}")
