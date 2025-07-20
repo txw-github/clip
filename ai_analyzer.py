@@ -20,9 +20,13 @@ class AIAnalyzer:
         
         if self.enabled:
             self.api_key = self.config.get('api_key')
-            self.base_url = self.config.get('url', 'https://www.chataiapi.com/v1')
+            # 统一使用 base_url 字段
+            self.base_url = self.config.get('base_url') or self.config.get('url', 'https://www.chataiapi.com/v1')
             self.model = self.config.get('model', 'claude-3-5-sonnet-20240620')
-            print(f"✅ AI分析器已启用: {self.config.get('provider')} / {self.model}")
+            self.api_type = self.config.get('api_type', 'openai_compatible')
+            print(f"✅ AI分析器已启用: {self.config.get('provider', '未知')} / {self.model}")
+            print(f"  📡 API类型: {self.api_type}")
+            print(f"  🔗 API地址: {self.base_url}")
         else:
             print("📝 AI分析器未启用，使用纯规则分析")
     
@@ -83,53 +87,22 @@ class AIAnalyzer:
 """
     
     def _call_ai_api(self, prompt: str) -> Optional[str]:
-        """调用AI API"""
+        """调用AI API - 使用统一配置助手"""
         try:
-            # 使用您提供的API调用格式
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "你是专业的影视剧情分析师，擅长识别电视剧中的精彩片段和剧情价值。"
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "max_tokens": 1000,
-                "temperature": 0.7
-            }
+            from api_config_helper import config_helper
             
-            headers = {
-                'Accept': 'application/json',
-                'Authorization': f'Bearer {self.api_key}',
-                'User-Agent': 'Replit-TV-Clipper/1.0.0',
-                'Content-Type': 'application/json'
-            }
+            # 构建完整的提示
+            full_prompt = f"""你是专业的影视剧情分析师，擅长识别电视剧中的精彩片段和剧情价值。
+
+{prompt}"""
             
-            # 根据您的示例，完整的URL应该是base_url + "/chat/completions"
-            if not self.base_url.endswith('/chat/completions'):
-                if self.base_url.endswith('/v1'):
-                    url = self.base_url + "/chat/completions"
-                else:
-                    url = self.base_url + "/v1/chat/completions"
+            # 使用统一的API调用方法
+            response = config_helper.call_ai_api(full_prompt, self.config)
+            
+            if response:
+                return response
             else:
-                url = self.base_url
-            
-            response = requests.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                return data['choices'][0]['message']['content']
-            else:
-                print(f"API调用失败: {response.status_code} - {response.text}")
+                print(f"API调用失败: 返回空结果")
                 return None
                 
         except Exception as e:

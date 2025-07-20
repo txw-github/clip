@@ -181,7 +181,7 @@ class StableVideoClipper:
         for attempt in range(max_retries):
             try:
                 print(f"  🤖 AI分析尝试 {attempt + 1}/{max_retries}")
-                response = config_helper.call_ai_api(prompt, self.config)
+                response = config_helper.call_ai_api(prompt, self.config)ll_ai_api(prompt, self.config)
                 if response:
                     analysis = self.parse_ai_response(response)
                     if analysis.get('highlights'):
