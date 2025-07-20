@@ -1,9 +1,10 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
 统一电视剧智能剪辑系统
-使用统一的配置和AI客户端
+解决剪辑时长控制、跨集连贯性、专业旁白优化问题
 """
 
 import os
@@ -21,17 +22,27 @@ class UnifiedTVClipper:
         self.video_folder = "videos" 
         self.output_folder = "clips"
         self.cache_folder = "analysis_cache"
+        self.series_context_file = os.path.join(self.cache_folder, "series_context.json")
 
         # 创建目录
         for folder in [self.srt_folder, self.video_folder, self.output_folder, self.cache_folder]:
             os.makedirs(folder, exist_ok=True)
 
-        print("🚀 统一电视剧智能剪辑系统")
+        # **新增**: 剪辑时长控制标准
+        self.clip_duration_standards = {
+            'min_duration': 90,   # 最短1.5分钟
+            'max_duration': 240,  # 最长4分钟  
+            'target_duration': 150,  # 目标2.5分钟
+            'buffer_seconds': 5   # 前后缓冲5秒
+        }
+
+        print("🚀 统一电视剧智能剪辑系统 v2.0")
         print("=" * 60)
         print(f"📁 字幕目录: {self.srt_folder}/")
         print(f"🎬 视频目录: {self.video_folder}/")
         print(f"📤 输出目录: {self.output_folder}/")
         print(f"💾 缓存目录: {self.cache_folder}/")
+        print(f"⏱️ 片段时长: {self.clip_duration_standards['min_duration']}-{self.clip_duration_standards['max_duration']}秒")
 
         # 显示AI状态
         if unified_config.is_enabled():
@@ -42,6 +53,47 @@ class UnifiedTVClipper:
             print(f"🤖 AI分析: 已启用 ({provider_name} - {model})")
         else:
             print("📝 AI分析: 未启用")
+
+    def load_series_context(self) -> Dict:
+        """**新增**: 加载全剧上下文，支持跨集连贯性"""
+        if os.path.exists(self.series_context_file):
+            try:
+                with open(self.series_context_file, 'r', encoding='utf-8') as f:
+                    context = json.load(f)
+                    print(f"📚 加载全剧上下文: {len(context.get('episodes', {}))} 集")
+                    return context
+            except:
+                pass
+        
+        # 默认上下文结构
+        return {
+            "series_info": {
+                "title": "电视剧系列",
+                "genre": "法律剧情",
+                "main_themes": ["正义与法律", "家庭伦理", "社会问题"],
+                "main_characters": {}
+            },
+            "episodes": {},
+            "story_arcs": {
+                "main_storyline": [],
+                "character_development": {},
+                "recurring_themes": []
+            },
+            "continuity_elements": {
+                "unresolved_mysteries": [],
+                "character_relationships": {},
+                "plot_foreshadowing": []
+            }
+        }
+
+    def save_series_context(self, context: Dict):
+        """**新增**: 保存全剧上下文"""
+        try:
+            with open(self.series_context_file, 'w', encoding='utf-8') as f:
+                json.dump(context, f, indent=2, ensure_ascii=False)
+            print(f"💾 更新全剧上下文")
+        except Exception as e:
+            print(f"⚠️ 保存上下文失败: {e}")
 
     def setup_ai_config(self):
         """配置AI"""
@@ -123,30 +175,28 @@ class UnifiedTVClipper:
         return subtitles
 
     def _extract_episode_number(self, filename: str) -> str:
-        """提取集数 - 直接使用SRT文件名"""
+        """提取集数"""
         base_name = os.path.splitext(filename)[0]
         
-        # 尝试提取数字集数
         patterns = [r'[Ee](\d+)', r'EP(\d+)', r'第(\d+)集', r'S\d+E(\d+)', r'(\d+)']
         for pattern in patterns:
             match = re.search(pattern, base_name, re.I)
             if match:
                 return f"E{match.group(1).zfill(2)}"
         
-        # 如果没有找到数字，返回文件名本身
         return base_name
 
     def analyze_episode(self, subtitles: List[Dict], filename: str) -> Optional[Dict]:
-        """完整剧集分析 - 解决API调用次数、剧情连贯性和旁白生成问题"""
+        """**重大改进**: 带跨集连贯性的完整剧集分析"""
         episode_num = self._extract_episode_number(filename)
 
-        # 检查缓存 - 避免重复API调用
-        cache_file = os.path.join(self.cache_folder, f"{episode_num}_complete_analysis.json")
+        # 检查缓存
+        cache_file = os.path.join(self.cache_folder, f"{episode_num}_enhanced_analysis.json")
         if os.path.exists(cache_file):
             try:
                 with open(cache_file, 'r', encoding='utf-8') as f:
                     cached_analysis = json.load(f)
-                    print(f"📋 使用缓存完整分析: {episode_num}")
+                    print(f"📋 使用缓存分析: {episode_num}")
                     return cached_analysis
             except:
                 pass
@@ -155,221 +205,188 @@ class UnifiedTVClipper:
             print(f"❌ 未启用AI分析，使用智能规则分析")
             return self._fallback_intelligent_analysis(subtitles, episode_num)
 
-        # **核心改进1**: 整集一次性AI分析，大幅减少API调用
-        print(f"🤖 AI完整分析 {episode_num}（整集上下文，保证连贯性）")
-        analysis = self._ai_analyze_complete_episode(subtitles, episode_num)
+        # **核心改进**: 加载全剧上下文，实现跨集连贯
+        series_context = self.load_series_context()
+        
+        print(f"🤖 AI完整分析 {episode_num}（含跨集连贯性分析）")
+        analysis = self._ai_analyze_with_series_context(subtitles, episode_num, series_context)
 
-        # 保存到缓存
         if analysis:
+            # **更新全剧上下文**
+            self._update_series_context(series_context, episode_num, analysis)
+            self.save_series_context(series_context)
+            
+            # 保存到缓存
             try:
                 with open(cache_file, 'w', encoding='utf-8') as f:
                     json.dump(analysis, f, indent=2, ensure_ascii=False)
-                print(f"💾 完整分析结果已缓存")
+                print(f"💾 分析结果已缓存")
             except Exception as e:
                 print(f"⚠️ 缓存保存失败: {e}")
 
         return analysis
 
-    def _ai_analyze_complete_episode(self, subtitles: List[Dict], episode_num: str) -> Optional[Dict]:
-        """**核心改进**: AI完整分析整集，一次调用解决所有问题"""
-        # **改进1**: 构建完整上下文，避免片段化分析
-        full_text = ' '.join([sub['text'] for sub in subtitles])
+    def _ai_analyze_with_series_context(self, subtitles: List[Dict], episode_num: str, series_context: Dict) -> Optional[Dict]:
+        """**核心升级**: 带全剧上下文的AI分析"""
         
-        # **改进2**: 智能分段，避免超长文本
-        text_segments = self._create_text_segments(full_text, max_length=8000)
-        main_segment = text_segments[0] if text_segments else full_text[:8000]
+        # 构建当前集内容
+        full_text = ' '.join([sub['text'] for sub in subtitles])
+        main_content = full_text[:10000] if len(full_text) > 10000 else full_text
 
-        # **改进3**: 高级AI分析提示词，深度剧情理解
-        prompt = f"""# 电视剧剧情深度分析与短视频剪辑策略
+        # **构建跨集上下文信息**
+        previous_episodes = list(series_context.get('episodes', {}).keys())
+        story_continuity = ""
+        
+        if previous_episodes:
+            # 获取前一集的关键信息
+            prev_ep = previous_episodes[-1] if previous_episodes else None
+            if prev_ep and prev_ep in series_context['episodes']:
+                prev_info = series_context['episodes'][prev_ep]
+                story_continuity = f"""
+【前集回顾 - {prev_ep}】:
+主要剧情: {prev_info.get('main_theme', '剧情发展')}
+关键线索: {', '.join(prev_info.get('key_clues', []))}
+悬念伏笔: {', '.join(prev_info.get('cliffhangers', []))}
+角色发展: {prev_info.get('character_development', '角色关系变化')}
+"""
 
-你是资深影视剧情分析师和短视频剪辑专家，具备以下专业能力：
-- 深度剧情解构和戏剧冲突识别
-- 情感节奏把控和观众心理分析
-- 故事线索梳理和伏笔铺垫分析
-- 短视频传播规律和爆点预测
+        # **高级AI分析提示词 - 参考您的专业示例**
+        prompt = f"""# 电视剧剧情深度分析与专业短视频制作
 
-## 分析目标
-为 **{episode_num}** 创建3-5个高质量连贯短视频片段，确保完整剧情叙述。
+你是顶级影视剧情分析师和短视频制作专家，请为 **{episode_num}** 进行专业分析。
 
-## 剧集内容
+## 全剧上下文信息
+{story_continuity}
+
+主要故事线: {', '.join(series_context.get('story_arcs', {}).get('main_storyline', ['剧情发展']))}
+核心主题: {', '.join(series_context.get('series_info', {}).get('main_themes', ['人物关系', '社会话题']))}
+未解之谜: {', '.join(series_context.get('continuity_elements', {}).get('unresolved_mysteries', []))}
+
+## 当前集内容
 ```
-{main_segment}
+{main_content}
 ```
 
-## 深度分析维度
+## 专业分析要求
 
-### 1. 剧情结构分析
-- **起承转合**：识别完整戏剧结构
-- **冲突层次**：主线冲突、支线冲突、内心冲突
-- **节奏控制**：紧张-缓解-高潮的节奏变化
-- **信息密度**：关键信息的分布和揭示时机
+### 1. 剧情连贯性分析
+- 与前集的剧情呼应和发展
+- 本集新引入的故事线索
+- 为后续剧集埋下的伏笔
+- 角色关系的演进轨迹
 
-### 2. 角色关系动态
-- **关系转折**：角色间关系的重要变化点
-- **情感转换**：情感状态的戏剧性变化
-- **立场对立**：观点冲突和价值观碰撞
-- **成长轨迹**：角色内在发展和突破
+### 2. 精彩片段识别（每段{self.clip_duration_standards['min_duration']}-{self.clip_duration_standards['max_duration']}秒）
+- 识别3-4个高质量独立片段
+- 每个片段必须有完整的戏剧结构
+- 确保片段间的逻辑连贯性
+- 时长控制在标准范围内
 
-### 3. 剧情连贯性保证
-- **前情回应**：对前集内容的呼应和发展
-- **伏笔铺垫**：为后续剧情埋下的线索
-- **逻辑链条**：因果关系的完整性
-- **反转处理**：如何处理剧情反转与前文的关联
+### 3. 专业旁白解说（参考示例风格）
+- 开场: 制造悬念和吸引力的开场白
+- 背景: 简要说明情境和背景
+- 高潮: 强调最精彩和冲突最激烈的部分  
+- 结论: 升华意义或引发思考的总结
 
-### 4. 短视频传播价值
-- **情感共鸣点**：能引起观众强烈共鸣的内容
-- **讨论话题性**：容易引发讨论的争议点
-- **记忆点设计**：令人印象深刻的台词或情节
-- **观众代入感**：让观众产生代入感的场景
+### 4. 跨集连贯保证
+- 确保本集片段与整体故事线的一致性
+- 处理剧情反转与前情的关联
+- 维护角色发展的连续性
 
-## 输出要求
-
-请严格按照以下JSON格式输出分析结果：
+请严格按照以下JSON格式输出：
 
 ```json
 {{
     "episode_analysis": {{
         "episode_number": "{episode_num}",
-        "genre_classification": "具体类型(如:都市情感/法律悬疑/家庭伦理/职场竞争)",
-        "core_theme": "本集核心主题(一句话概括)",
-        "emotional_arc": "情感发展轨迹(从...到...的变化)",
-        "plot_structure": {{
-            "setup": "情节设置阶段的关键内容",
-            "development": "发展阶段的主要冲突",
-            "climax": "高潮部分的核心事件",
-            "resolution": "解决阶段的关键转折"
-        }},
-        "key_conflicts": [
-            "主要冲突1(具体描述)",
-            "次要冲突2(具体描述)"
-        ],
-        "narrative_techniques": ["倒叙", "插叙", "对比", "伏笔", "悬念"]
+        "main_theme": "本集核心主题",
+        "genre_type": "剧情类型(法律/家庭/悬疑等)",
+        "emotional_tone": "整体情感基调",
+        "continuity_analysis": {{
+            "connections_to_previous": ["与前集的关联点1", "关联点2"],
+            "new_story_elements": ["新引入的故事元素1", "元素2"],
+            "character_development": "角色在本集中的发展变化",
+            "foreshadowing_for_future": ["为后续剧集的铺垫1", "铺垫2"]
+        }}
     }},
     "highlight_segments": [
         {{
             "segment_id": 1,
-            "title": "【引人入胜的标题】",
+            "title": "【精彩标题】具体描述片段亮点",
             "start_time": "00:XX:XX,XXX",
-            "end_time": "00:XX:XX,XXX", 
-            "duration_seconds": XXX,
-            "segment_type": "冲突爆发/情感转折/真相揭示/关系突破",
-            "dramatic_analysis": {{
-                "conflict_intensity": 9.2,
-                "emotional_impact": 8.8,
-                "plot_advancement": 9.0,
-                "audience_engagement": 9.5,
-                "overall_score": 9.1
-            }},
-            "content_breakdown": {{
-                "setup_context": "场景背景和前情回顾",
-                "core_conflict": "核心冲突的具体表现",
-                "character_dynamics": "角色互动和关系变化",
-                "emotional_peaks": "情感高潮的具体时刻",
-                "plot_significance": "对整体剧情的重要意义"
+            "end_time": "00:XX:XX,XXX",
+            "duration_seconds": {self.clip_duration_standards['target_duration']},
+            "plot_significance": "这个片段在整体剧情中的重要意义",
+            "dramatic_elements": ["戏剧元素1", "元素2", "元素3"],
+            "character_development": "角色在此片段中的发展或变化",
+            "hook_reason": "吸引观众的核心卖点",
+            "professional_narration": {{
+                "opening": "制造悬念的开场解说（15秒内）",
+                "background": "简要说明背景和情境（20-30秒）",
+                "climax": "强调高潮和冲突的解说（30-60秒）",
+                "conclusion": "升华意义或引发思考（10-15秒）",
+                "full_script": "完整的专业旁白解说稿"
             }},
             "key_dialogues": [
-                {{"speaker": "角色名", "line": "关键台词", "impact": "台词影响力说明"}},
+                {{"speaker": "角色名", "line": "关键台词", "impact": "台词的重要性"}},
                 {{"speaker": "角色名", "line": "重要对话", "impact": "对剧情的推进作用"}}
             ],
-            "visual_highlights": [
-                "视觉亮点1(表情/动作/场景)",
-                "视觉亮点2(构图/色彩/道具)"
-            ],
-            "narrative_voice": {{
-                "hook_opening": "15秒内抓住观众的开场解说",
-                "context_building": "30-45秒建立背景和冲突",
-                "tension_escalation": "45-90秒冲突升级解说",
-                "climax_moment": "90-120秒高潮时刻解说",
-                "impact_conclusion": "最后15秒影响和意义总结"
-            }},
-            "social_media_appeal": {{
-                "hashtag_potential": ["#相关话题1", "#热门标签2"],
-                "discussion_points": ["争议点1", "共鸣点2"],
-                "shareability_score": 8.5,
-                "viral_elements": ["反转", "金句", "情感爆点"]
-            }},
-            "continuity_bridge": "与下个片段的故事连接和逻辑过渡"
+            "visual_highlights": ["视觉亮点1", "亮点2"],
+            "continuity_bridge": "与下个片段或下集的连接说明"
         }}
     ],
-    "series_continuity": {{
-        "previous_connections": [
-            "与前集的具体关联点1",
-            "前情铺垫的回应2"
-        ],
-        "future_setups": [
-            "为后续剧情埋下的伏笔1",
-            "角色发展的铺垫2"
-        ],
-        "character_arcs": {{
-            "主角名": "在本集中的成长变化",
-            "重要配角": "关系或立场的转变"
-        }},
-        "plot_threads": [
-            "主线剧情的发展状态",
-            "支线故事的推进情况"
-        ]
+    "episode_summary": {{
+        "core_conflicts": ["本集的核心冲突点"],
+        "key_clues": ["重要线索或发现"],
+        "cliffhangers": ["悬念和伏笔"],
+        "character_arcs": "主要角色的发展轨迹",
+        "thematic_elements": ["主题元素"]
     }},
-    "technical_requirements": {{
-        "editing_notes": [
-            "剪辑建议1(如:保留完整对话)",
-            "技术要求2(如:突出表情特写)"
-        ],
-        "audio_focus": [
-            "重点音频1(关键台词)",
-            "背景音乐建议2"
-        ],
-        "pacing_control": "节奏控制建议"
+    "technical_notes": {{
+        "editing_suggestions": ["剪辑建议"],
+        "duration_control": "时长控制要点",
+        "pacing_notes": "节奏控制建议"
     }}
 }}
 ```
 
-## 分析标准
-- **准确性**：时间码必须精确对应字幕内容
-- **完整性**：每个片段必须是完整的戏剧单元
-- **连贯性**：片段间要有清晰的逻辑关联
-- **传播性**：符合短视频平台的传播规律
-- **专业性**：体现专业剧情分析的深度
+请确保：
+1. **时长精确控制**: 每个片段严格控制在{self.clip_duration_standards['min_duration']}-{self.clip_duration_standards['max_duration']}秒
+2. **跨集连贯性**: 充分考虑与前后集的关联
+3. **专业旁白**: 参考示例，生成引人入胜的专业解说
+4. **完整性**: 片段组合能完整讲述本集核心故事"""
 
-请开始深度分析。"""
+        system_prompt = """你是顶级影视内容分析专家，具备以下专业能力：
 
-        system_prompt = """你是顶级影视内容分析专家，拥有以下核心专长：
+**核心专长**：
+- 影视剧情深度解构与叙事分析
+- 短视频爆款内容制作策略  
+- 跨集连贯性和故事线索管理
+- 专业旁白解说和情感引导
+- 观众心理和传播规律研究
 
-**专业背景**：
-- 15年影视剧情分析经验，深度解构过500+优秀作品
-- 短视频爆款制作专家，累计播放量10亿+
-- 戏剧理论专家，精通亚里士多德《诗学》和现代叙事学
-- 观众心理学研究者，深谙传播规律和情感共鸣机制
+**分析标准**：
+- 以故事完整性为前提，确保跨集连贯
+- 严格控制片段时长，保证观看体验
+- 生成专业级旁白解说，引发共鸣
+- 平衡艺术价值与传播效果
+- 注重细节但不失整体观
 
-**核心能力**：
-1. **深层剧情解构**：识别隐藏的戏剧结构、伏笔呼应、主题层次
-2. **情感节奏精准把控**：预测观众情感曲线，找到最佳切入点
-3. **角色关系动态分析**：追踪复杂人物关系网络的微妙变化
-4. **短视频传播策略**：结合平台算法和用户习惯，提升传播效果
-5. **跨集连贯性设计**：确保单集精彩度与整体叙事的平衡
-
-**分析原则**：
-- 以观众情感共鸣为核心驱动
-- 平衡艺术性与传播性
-- 注重细节但不失大局观
-- 数据驱动的理性分析与直觉判断并重
-
-请运用你的专业知识，进行深度而精准的剧情分析，确保输出的JSON格式严谨且内容丰富。"""
+请运用专业知识进行深度分析，确保输出内容的专业性和实用性。"""
 
         try:
             response = ai_client.call_ai(prompt, system_prompt)
             if response:
-                parsed_result = self._parse_complete_ai_response(response)
+                parsed_result = self._parse_enhanced_ai_response(response)
                 if parsed_result:
-                    print(f"✅ AI完整分析成功：{len(parsed_result.get('highlight_segments', []))} 个片段")
+                    print(f"✅ AI增强分析成功：{len(parsed_result.get('highlight_segments', []))} 个片段")
                     return parsed_result
         except Exception as e:
-            print(f"⚠️ AI完整分析失败: {e}")
+            print(f"⚠️ AI分析失败: {e}")
 
-        # 降级到智能规则分析
         return self._fallback_intelligent_analysis(subtitles, episode_num)
 
-    def _parse_complete_ai_response(self, response: str) -> Optional[Dict]:
-        """解析完整AI响应"""
+    def _parse_enhanced_ai_response(self, response: str) -> Optional[Dict]:
+        """解析增强版AI响应"""
         try:
             if "```json" in response:
                 start = response.find("```json") + 7
@@ -382,80 +399,100 @@ class UnifiedTVClipper:
 
             result = json.loads(json_text)
             
-            # **改进4**: 验证和完善分析结果
-            return self._validate_and_enhance_analysis(result)
+            # **验证和调整片段时长**
+            return self._validate_and_adjust_segments(result)
         except Exception as e:
             print(f"⚠️ JSON解析失败: {e}")
             return None
 
-    def _validate_and_enhance_analysis(self, analysis: Dict) -> Dict:
-        """验证和完善分析结果"""
-        # 确保必要字段存在
-        if 'episode_analysis' not in analysis:
-            analysis['episode_analysis'] = {}
+    def _validate_and_adjust_segments(self, analysis: Dict) -> Dict:
+        """**新增**: 验证和调整片段时长"""
+        segments = analysis.get('highlight_segments', [])
         
-        if 'highlight_segments' not in analysis:
-            analysis['highlight_segments'] = []
+        for segment in segments:
+            # 计算实际时长
+            start_time = segment.get('start_time', '00:00:00,000')
+            end_time = segment.get('end_time', '00:02:30,000')
+            
+            start_seconds = self._time_to_seconds(start_time)
+            end_seconds = self._time_to_seconds(end_time)
+            actual_duration = end_seconds - start_seconds
+            
+            # **时长调整逻辑**
+            if actual_duration < self.clip_duration_standards['min_duration']:
+                # 太短，延长到最小时长
+                target_end = start_seconds + self.clip_duration_standards['min_duration']
+                segment['end_time'] = self._seconds_to_time(target_end)
+                segment['duration_seconds'] = self.clip_duration_standards['min_duration']
+                print(f"    ⚠️ 片段时长调整: {actual_duration:.1f}s -> {self.clip_duration_standards['min_duration']}s")
+                
+            elif actual_duration > self.clip_duration_standards['max_duration']:
+                # 太长，缩短到最大时长
+                target_end = start_seconds + self.clip_duration_standards['max_duration']
+                segment['end_time'] = self._seconds_to_time(target_end)
+                segment['duration_seconds'] = self.clip_duration_standards['max_duration']
+                print(f"    ⚠️ 片段时长调整: {actual_duration:.1f}s -> {self.clip_duration_standards['max_duration']}s")
+            else:
+                segment['duration_seconds'] = actual_duration
 
-        # 为每个片段补充旁白
-        for segment in analysis['highlight_segments']:
-            if 'narrative_voice' not in segment:
-                segment['narrative_voice'] = self._generate_segment_narration(segment)
+            # **确保旁白完整性**
+            if 'professional_narration' not in segment:
+                segment['professional_narration'] = self._generate_professional_narration(segment)
 
         return analysis
 
-    def _generate_segment_narration(self, segment: Dict) -> Dict:
-        """为片段生成专业旁白"""
+    def _generate_professional_narration(self, segment: Dict) -> Dict:
+        """**新增**: 生成专业旁白（参考用户示例风格）"""
         title = segment.get('title', '精彩片段')
-        significance = segment.get('plot_significance', '重要剧情')
+        hook_reason = segment.get('hook_reason', '剧情精彩')
+        plot_significance = segment.get('plot_significance', '重要剧情')
         
         return {
-            "opening": f"在这个关键时刻，{title}即将展开...",
-            "process": f"随着剧情的深入，{significance}逐渐显现",
-            "climax": f"紧张的氛围达到顶点，真相即将揭晓",
-            "ending": f"这一幕为后续剧情埋下了重要伏笔"
+            "opening": f"在这个关键时刻，{title.replace('【', '').replace('】', '').split('】')[0] if '】' in title else title}即将上演！",
+            "background": f"面对复杂的情况，{hook_reason}让所有人都紧张起来。",
+            "climax": f"最精彩的是，{plot_significance}在这一刻达到了顶点！",
+            "conclusion": f"这一幕，为后续剧情埋下了重要的伏笔。",
+            "full_script": f"在这个关键时刻，{title.replace('【', '').replace('】', '').split('】')[0] if '】' in title else title}即将上演！面对复杂的情况，{hook_reason}让所有人都紧张起来。最精彩的是，{plot_significance}在这一刻达到了顶点！这一幕，为后续剧情埋下了重要的伏笔。"
         }
 
-    def _create_text_segments(self, text: str, max_length: int = 8000) -> List[str]:
-        """创建文本分段，避免超长"""
-        if len(text) <= max_length:
-            return [text]
+    def _update_series_context(self, context: Dict, episode_num: str, analysis: Dict):
+        """**新增**: 更新全剧上下文信息"""
+        episode_info = analysis.get('episode_analysis', {})
+        episode_summary = analysis.get('episode_summary', {})
         
-        segments = []
-        words = text.split()
-        current_segment = []
-        current_length = 0
+        # 添加本集信息到全剧上下文
+        context['episodes'][episode_num] = {
+            'main_theme': episode_info.get('main_theme', '剧情发展'),
+            'key_clues': episode_summary.get('key_clues', []),
+            'cliffhangers': episode_summary.get('cliffhangers', []),
+            'character_development': episode_info.get('continuity_analysis', {}).get('character_development', ''),
+            'foreshadowing': episode_info.get('continuity_analysis', {}).get('foreshadowing_for_future', [])
+        }
         
-        for word in words:
-            if current_length + len(word) > max_length:
-                segments.append(' '.join(current_segment))
-                current_segment = [word]
-                current_length = len(word)
-            else:
-                current_segment.append(word)
-                current_length += len(word) + 1
+        # 更新主要故事线
+        main_storyline = context['story_arcs']['main_storyline']
+        new_elements = episode_info.get('continuity_analysis', {}).get('new_story_elements', [])
+        main_storyline.extend(new_elements)
         
-        if current_segment:
-            segments.append(' '.join(current_segment))
-        
-        return segments
+        # 更新未解之谜
+        mysteries = context['continuity_elements']['unresolved_mysteries']
+        mysteries.extend(episode_summary.get('cliffhangers', []))
 
     def _fallback_intelligent_analysis(self, subtitles: List[Dict], episode_num: str) -> Dict:
-        """**改进5**: 智能规则分析作为备选方案"""
-        print(f"📝 使用智能规则分析（无AI）")
+        """智能规则分析（AI不可用时）"""
+        print(f"📝 使用智能规则分析")
         
-        # 基于规则的智能分析
         segments = self._find_key_segments_by_rules(subtitles)
         
         return {
             "episode_analysis": {
                 "episode_number": episode_num,
                 "main_theme": f"{episode_num}集核心剧情",
-                "plot_type": "剧情片",
+                "genre_type": "剧情片",
                 "analysis_method": "智能规则"
             },
-            "highlight_segments": segments[:3],  # 最多3个片段
-            "series_continuity": {
+            "highlight_segments": segments[:3],
+            "episode_summary": {
                 "note": "基于规则分析，建议启用AI获得更好效果"
             }
         }
@@ -464,36 +501,48 @@ class UnifiedTVClipper:
         """基于规则找到关键片段"""
         key_segments = []
         
-        # 关键词权重
         keywords = {
             '四二八案': 10, '628案': 10, '听证会': 8, '申诉': 8,
             '证据': 6, '真相': 6, '霸凌': 7, '正当防卫': 8,
             '反转': 5, '发现': 4, '冲突': 4, '决定': 3
         }
         
-        # 分析每个时间窗口
-        window_size = 30  # 30个字幕条目约2-3分钟
-        step = 15
+        # **改进**: 按时长标准分析窗口
+        target_duration = self.clip_duration_standards['target_duration']
+        avg_subtitle_duration = 3  # 假设每条字幕3秒
+        window_size = max(30, target_duration // avg_subtitle_duration)
         
-        for i in range(0, len(subtitles) - window_size, step):
+        for i in range(0, len(subtitles) - window_size, window_size // 2):
             window = subtitles[i:i + window_size]
             text = ' '.join([sub['text'] for sub in window])
             
-            # 计算权重分数
             score = 0
             for keyword, weight in keywords.items():
                 score += text.count(keyword) * weight
             
-            if score >= 15:  # 高分片段
+            if score >= 15:
+                # **确保时长符合标准**
+                actual_duration = self._time_to_seconds(window[-1]['end']) - self._time_to_seconds(window[0]['start'])
+                
+                # 调整窗口大小以符合时长要求
+                if actual_duration < self.clip_duration_standards['min_duration']:
+                    # 扩展窗口
+                    extended_end = min(i + int(self.clip_duration_standards['min_duration'] / avg_subtitle_duration), len(subtitles) - 1)
+                    window = subtitles[i:extended_end]
+                elif actual_duration > self.clip_duration_standards['max_duration']:
+                    # 缩短窗口
+                    reduced_end = i + int(self.clip_duration_standards['max_duration'] / avg_subtitle_duration)
+                    window = subtitles[i:reduced_end]
+                
                 key_segments.append({
                     "segment_id": len(key_segments) + 1,
-                    "title": f"精彩片段{len(key_segments) + 1}",
+                    "title": f"【精彩片段{len(key_segments) + 1}】关键剧情",
                     "start_time": window[0]['start'],
                     "end_time": window[-1]['end'],
                     "duration_seconds": self._time_to_seconds(window[-1]['end']) - self._time_to_seconds(window[0]['start']),
                     "dramatic_value": min(score / 10, 10),
                     "plot_significance": "基于关键词识别的重要片段",
-                    "narrative_voice": self._generate_segment_narration({"title": f"片段{len(key_segments) + 1}"})
+                    "professional_narration": self._generate_professional_narration({"title": f"片段{len(key_segments) + 1}"})
                 })
         
         return key_segments
@@ -539,85 +588,16 @@ class UnifiedTVClipper:
                 created_clips.append(clip_path)
                 continue
 
-            # **改进6**: 剪辑视频并生成旁白
-            if self._create_single_clip(video_file, segment, clip_path):
-                # **改进7**: 生成专业旁白文件
-                self._create_narration_file(clip_path, segment, analysis)
+            # **改进**: 剪辑视频时添加缓冲时间
+            if self._create_single_clip_with_buffer(video_file, segment, clip_path):
+                # **生成专业旁白文件**
+                self._create_enhanced_narration_file(clip_path, segment, analysis)
                 created_clips.append(clip_path)
 
         return created_clips
 
-    def _create_narration_file(self, video_path: str, segment: Dict, analysis: Dict):
-        """**改进**: 创建专业旁白解说文件"""
-        try:
-            narration_path = video_path.replace('.mp4', '_旁白解说.txt')
-            
-            narrative = segment.get('narrative_voice', {})
-            episode_theme = analysis.get('episode_analysis', {}).get('main_theme', '精彩剧情')
-            
-            content = f"""🎙️ 专业旁白解说稿
-{"=" * 50}
-
-📺 片段标题: {segment.get('title', '精彩片段')}
-🎯 剧情主题: {episode_theme}
-⏱️ 时长: {segment.get('duration_seconds', 0):.1f} 秒
-
-📜 完整旁白解说:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-【开场解说】 (0-3秒)
-{narrative.get('opening', '在这个关键时刻，剧情即将展开...')}
-
-【过程解说】 (3-8秒) 
-{narrative.get('process', '随着故事的深入发展...')}
-
-【高潮解说】 (8-12秒)
-{narrative.get('climax', '紧张的氛围达到顶点...')}
-
-【结尾解说】 (12-15秒)
-{narrative.get('ending', '这一幕为后续剧情埋下伏笔...')}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-💡 剧情价值解析:
-{segment.get('plot_significance', '重要剧情节点')}
-
-🎭 情感高潮:
-{segment.get('emotional_peak', '情感张力充沛')}
-
-📝 关键台词:
-"""
-            
-            for dialogue in segment.get('key_dialogues', []):
-                content += f"• {dialogue}\n"
-            
-            content += f"""
-✨ 内容亮点:
-"""
-            for highlight in segment.get('content_highlights', ['精彩剧情']):
-                content += f"• {highlight}\n"
-            
-            content += f"""
-🔗 剧情衔接:
-{segment.get('connection_to_next', '与后续剧情紧密相连')}
-
-📋 使用说明:
-• 本旁白解说可直接用于短视频配音
-• 分段时间仅供参考，可根据实际调整
-• 解说内容突出剧情核心，增强观众理解
-• 适合抖音、B站等短视频平台使用
-"""
-            
-            with open(narration_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            print(f"    📜 生成旁白解说: {os.path.basename(narration_path)}")
-            
-        except Exception as e:
-            print(f"    ⚠️ 生成旁白文件失败: {e}")
-
-    def _create_single_clip(self, video_file: str, segment: Dict, output_path: str) -> bool:
-        """创建单个片段"""
+    def _create_single_clip_with_buffer(self, video_file: str, segment: Dict, output_path: str) -> bool:
+        """**改进**: 创建单个片段，添加缓冲时间确保对话完整"""
         try:
             start_time = segment['start_time']
             end_time = segment['end_time']
@@ -627,7 +607,14 @@ class UnifiedTVClipper:
 
             start_seconds = self._time_to_seconds(start_time)
             end_seconds = self._time_to_seconds(end_time)
-            duration = end_seconds - start_seconds
+            
+            # **添加缓冲时间，确保对话完整性**
+            buffer = self.clip_duration_standards['buffer_seconds']
+            buffer_start = max(0, start_seconds - buffer)
+            buffer_end = end_seconds + buffer
+            duration = buffer_end - buffer_start
+
+            print(f"   缓冲后: {buffer_start:.1f}s --> {buffer_end:.1f}s ({duration:.1f}s)")
 
             if duration <= 0 or duration > 300:
                 print(f"   ❌ 时间段无效: {duration}秒")
@@ -645,15 +632,16 @@ class UnifiedTVClipper:
                 print(f"   ❌ ffmpeg未安装")
                 return False
 
-            # FFmpeg命令
+            # **优化的FFmpeg命令 - 确保质量和兼容性**
             cmd = [
                 ffmpeg_cmd,
                 '-hide_banner', '-loglevel', 'error',
                 '-i', video_file,
-                '-ss', str(start_seconds),
+                '-ss', str(buffer_start),
                 '-t', str(duration),
                 '-c:v', 'libx264', '-c:a', 'aac',
-                '-preset', 'fast', '-crf', '23',
+                '-preset', 'medium', '-crf', '20',  # 提高质量
+                '-movflags', '+faststart',  # 优化播放
                 '-avoid_negative_ts', 'make_zero',
                 '-y', output_path
             ]
@@ -667,15 +655,110 @@ class UnifiedTVClipper:
                     return True
                 else:
                     print(f"   ❌ 文件太小")
-                    os.remove(output_path)
+                    if os.path.exists(output_path):
+                        os.remove(output_path)
                     return False
             else:
-                print(f"   ❌ 剪辑失败")
+                print(f"   ❌ 剪辑失败: {result.stderr}")
                 return False
 
         except Exception as e:
             print(f"   ❌ 剪辑异常: {e}")
             return False
+
+    def _create_enhanced_narration_file(self, video_path: str, segment: Dict, analysis: Dict):
+        """**升级**: 创建增强版专业旁白解说文件（参考示例风格）"""
+        try:
+            narration_path = video_path.replace('.mp4', '_专业解说.txt')
+            
+            narration = segment.get('professional_narration', {})
+            episode_info = analysis.get('episode_analysis', {})
+            
+            # **参考用户示例的专业格式**
+            content = f"""📺 {episode_info.get('episode_number', '本集')} 专业旁白解说稿
+{"=" * 80}
+
+🎭 片段信息:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📺 片段标题: {segment.get('title', '精彩片段')}
+⏱️ 时间范围: {segment.get('start_time', '')} --> {segment.get('end_time', '')} ({segment.get('duration_seconds', 0):.1f}秒)
+🎯 剧情意义: {segment.get('plot_significance', '重要剧情节点')}
+🎭 戏剧元素: {', '.join(segment.get('dramatic_elements', ['精彩剧情']))}
+👥 角色发展: {segment.get('character_development', '角色关系发展')}
+🎪 吸引点: {segment.get('hook_reason', '剧情精彩')}
+
+📝 专业旁白解说:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【开场解说】 (0-15秒)
+{narration.get('opening', '在这个关键时刻，精彩剧情即将展开...')}
+
+【背景解说】 (15-45秒)  
+{narration.get('background', '随着剧情的深入发展，复杂的情况逐渐显现...')}
+
+【高潮解说】 (45-90秒)
+{narration.get('climax', '最精彩的时刻到来，紧张的氛围达到顶点...')}
+
+【结尾解说】 (90-{segment.get('duration_seconds', 120):.0f}秒)
+{narration.get('conclusion', '这一幕为后续剧情埋下了重要伏笔...')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📜 完整解说稿:
+{narration.get('full_script', '完整的专业旁白解说')}
+
+💡 关键台词:
+"""
+            
+            # 添加关键台词
+            for dialogue in segment.get('key_dialogues', []):
+                speaker = dialogue.get('speaker', '角色')
+                line = dialogue.get('line', '台词')
+                impact = dialogue.get('impact', '重要意义')
+                content += f"• {speaker}: \"{line}\" - {impact}\n"
+            
+            content += f"""
+✨ 视觉亮点:
+"""
+            for highlight in segment.get('visual_highlights', ['精彩画面']):
+                content += f"• {highlight}\n"
+            
+            content += f"""
+🔗 剧情连接:
+{segment.get('continuity_bridge', '与后续剧情的重要连接')}
+
+📊 传播要素:
+• 情感冲击力: ⭐⭐⭐⭐⭐
+• 话题讨论度: ⭐⭐⭐⭐⭐  
+• 故事完整性: ⭐⭐⭐⭐⭐
+• 观众代入感: ⭐⭐⭐⭐⭐
+
+📋 使用指南:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ 本解说稿可直接用于短视频配音制作
+✅ 分段时间仅供参考，可根据实际视频调整
+✅ 解说内容突出剧情核心，增强观众理解和共鸣  
+✅ 适合抖音、快手、B站等各大短视频平台
+✅ 建议配合背景音乐和字幕效果使用
+
+🎯 制作建议:
+• 开场3秒内抓住观众注意力
+• 背景介绍简洁明了，避免冗长
+• 高潮部分突出冲突和转折
+• 结尾留下悬念或思考空间
+• 整体节奏紧凑，信息密度适中
+
+生成时间: {analysis.get('generation_time', '自动生成')}
+分析类型: {'AI智能分析' if unified_config.is_enabled() else '规则分析'}
+"""
+            
+            with open(narration_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            print(f"    📜 生成专业解说: {os.path.basename(narration_path)}")
+            
+        except Exception as e:
+            print(f"    ⚠️ 生成解说文件失败: {e}")
 
     def _time_to_seconds(self, time_str: str) -> float:
         """时间转换为秒"""
@@ -693,6 +776,14 @@ class UnifiedTVClipper:
         except:
             return 0.0
 
+    def _seconds_to_time(self, seconds: float) -> str:
+        """**新增**: 秒转换为时间格式"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        millisecs = int((seconds % 1) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{millisecs:03d}"
+
     def process_single_episode(self, subtitle_file: str) -> bool:
         """处理单集"""
         print(f"\n📺 处理: {subtitle_file}")
@@ -705,10 +796,10 @@ class UnifiedTVClipper:
             print(f"❌ 字幕解析失败")
             return False
 
-        # 2. AI分析
+        # 2. **增强AI分析（含跨集连贯性）**
         analysis = self.analyze_episode(subtitles, subtitle_file)
         if not analysis:
-            print(f"❌ AI分析失败")
+            print(f"❌ 分析失败")
             return False
 
         # 3. 查找视频
@@ -717,7 +808,7 @@ class UnifiedTVClipper:
             print(f"❌ 未找到视频文件")
             return False
 
-        # 4. 创建片段
+        # 4. **创建标准时长片段**
         created_clips = self.create_video_clips(analysis, video_file)
 
         print(f"✅ {subtitle_file} 处理完成: {len(created_clips)} 个片段")
@@ -738,10 +829,6 @@ class UnifiedTVClipper:
             print(f"❌ {self.video_folder}/ 目录中未找到视频文件")
             return
 
-        if not unified_config.is_enabled():
-            print(f"❌ 请先配置AI接口")
-            return
-
         total_success = 0
 
         for subtitle_file in srt_files:
@@ -756,33 +843,38 @@ class UnifiedTVClipper:
         print(f"\n📊 处理完成:")
         print(f"✅ 成功处理: {total_success}/{len(srt_files)} 集")
         print(f"🎬 生成片段: {final_clips} 个")
+        print(f"⏱️ 片段时长: {self.clip_duration_standards['min_duration']}-{self.clip_duration_standards['max_duration']}秒标准")
 
     def show_main_menu(self):
         """主菜单"""
         while True:
             print("\n" + "=" * 60)
-            print("📺 统一电视剧智能剪辑系统")
+            print("📺 统一电视剧智能剪辑系统 v2.0")
             print("=" * 60)
 
             # 显示状态
             config_status = "🤖 已配置" if unified_config.is_enabled() else "❌ 未配置"
             print(f"AI状态: {config_status}")
+            print(f"时长标准: {self.clip_duration_standards['min_duration']}-{self.clip_duration_standards['max_duration']}秒")
 
             srt_files, video_files = self.check_files()
+            
+            # 显示上下文状态
+            series_context = self.load_series_context()
+            episodes_count = len(series_context.get('episodes', {}))
+            print(f"全剧上下文: {episodes_count} 集已分析")
 
             print("\n请选择操作:")
             print("1. 🎬 开始智能剪辑")
             print("2. 🤖 配置AI接口")
             print("3. 📁 检查文件状态")
-            print("4. ❌ 退出")
+            print("4. 🔄 清空全剧上下文")
+            print("5. ❌ 退出")
 
             try:
-                choice = input("\n请输入选择 (1-4): ").strip()
+                choice = input("\n请输入选择 (1-5): ").strip()
 
                 if choice == '1':
-                    if not unified_config.is_enabled():
-                        print(f"\n❌ 请先配置AI接口")
-                        continue
                     if not srt_files or not video_files:
                         print(f"\n❌ 请检查文件是否准备完整")
                         continue
@@ -800,6 +892,13 @@ class UnifiedTVClipper:
                     print(f"• 输出文件在: {self.output_folder}/")
 
                 elif choice == '4':
+                    if os.path.exists(self.series_context_file):
+                        os.remove(self.series_context_file)
+                        print(f"✅ 已清空全剧上下文")
+                    else:
+                        print(f"📝 上下文文件不存在")
+
+                elif choice == '5':
                     print("\n👋 感谢使用！")
                     break
 
