@@ -34,7 +34,8 @@ class UniversalAPIHelper:
                 'default_model': 'gemini-2.5-flash',
                 'headers': {},
                 'rank': 1,
-                'is_official': True
+                'is_official': True,
+                'description': '谷歌官方API，需要魔法上网，支持最新Gemini模型'
             },
             'openai_official': {
                 'name': 'OpenAI 官方API',
@@ -74,14 +75,22 @@ class UniversalAPIHelper:
                 'models': [
                     'deepseek-r1',
                     'deepseek-v3',
-                    'gemini-2.5-pro-preview-05-06',
+                    'claude-3-5-sonnet-20240620',
+                    'gemini-2.5-pro',
+                    'gemini-2.5-flash',
                     'gpt-4o',
-                    'claude-3.5-sonnet'
+                    'gpt-4o-mini'
                 ],
-                'default_model': 'deepseek-r1',
-                'headers': {},
+                'default_model': 'claude-3-5-sonnet-20240620',
+                'headers': {
+                    'Accept': 'application/json',
+                    'User-Agent': 'TV-Clipper/1.0.0',
+                    'Content-Type': 'application/json'
+                },
                 'rank': 4,
-                'is_official': False
+                'is_official': False,
+                'description': '国内稳定中转，支持Claude/GPT/Gemini/DeepSeek，无需魔法上网',
+                'features': ['支持reasoning_content', '支持图片上传', '响应速度快']
             },
             'suanli': {
                 'name': '算力云 (中转)',
@@ -135,22 +144,30 @@ class UniversalAPIHelper:
         print("🤖 AI分析配置 - 支持官方API和中转服务商")
         print("=" * 60)
 
-        # 先让用户选择官方还是中转
-        print("请选择API类型:")
-        print("1. 🏢 官方API (直连，需要魔法上网)")
-        print("2. 🌐 中转API (国内可访问，推荐)")
-        print("3. 🔧 自定义配置")
+        # 先让用户选择配置方式
+        print("请选择配置方式:")
+        print("1. 🧠 智能推荐 (根据您的需求自动推荐最佳配置)")
+        print("2. 🏢 官方API (直连，需要魔法上网)")
+        print("3. 🌐 中转API (国内可访问，推荐)")
+        print("4. 🔧 自定义配置")
         print("0. 跳过AI配置（使用基础分析）")
 
-        choice = input("\n请选择 (0-3): ").strip()
+        choice = input("\n请选择 (0-4): ").strip()
         
         if choice == "0":
             return {'enabled': False, 'provider': 'none'}
         elif choice == "1":
-            return self._setup_official_apis()
+            # 智能推荐
+            from smart_api_selector import smart_selector
+            if smart_selector.smart_configure():
+                return self.load_config()
+            else:
+                return {'enabled': False}
         elif choice == "2":
-            return self._setup_proxy_apis()
+            return self._setup_official_apis()
         elif choice == "3":
+            return self._setup_proxy_apis()
+        elif choice == "4":
             return self._configure_custom_service()
         else:
             print("❌ 无效选择，请重试")
@@ -506,10 +523,19 @@ class UniversalAPIHelper:
 
                 # 处理DeepSeek-R1的特殊输出格式
                 message = completion.choices[0].message
+                
+                # 打印思考过程（如果有）
                 if hasattr(message, 'reasoning_content') and message.reasoning_content:
-                    return message.content
-                else:
-                    return message.content
+                    print(f"🤔 AI思考过程:")
+                    reasoning_lines = message.reasoning_content.split('\n')
+                    for line in reasoning_lines[:3]:  # 只显示前3行思考过程
+                        if line.strip():
+                            print(f"   {line.strip()}")
+                    if len(reasoning_lines) > 3:
+                        print(f"   ... (共{len(reasoning_lines)}行思考)")
+                    print()
+                
+                return message.content
 
             except Exception as e:
                 error_msg = str(e)

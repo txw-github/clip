@@ -1,145 +1,134 @@
 
-# 📺 智能电视剧分析剪辑系统
+# 🎬 智能电视剧剪辑系统
 
-## 🤖 AI驱动的智能剪辑工具
-
-这是一个基于AI大模型的电视剧智能分析和视频剪辑系统，能够：
-
-- 🧠 **AI智能分析**: 调用多种大模型接口，智能识别剧情高潮
-- 🎯 **自适应分析**: 不依赖固定关键词，适应各种剧情类型
-- ✂️ **精准剪辑**: 基于AI分析结果进行视频片段剪切
-- 📊 **详细报告**: 生成专业的分析报告和剪辑说明
-
-## 🚀 快速开始
-
-### 1. 一键配置
-```bash
-python quick_setup.py
-```
-按提示选择AI模型并输入API密钥即可完成配置。
-
-### 2. 运行系统
-```bash
-python main.py
-```
-
-### 3. 文件准备
-```
-项目目录/
-├── 字幕文件.txt        # 字幕文件
-├── 字幕文件2.txt       # 更多字幕
-├── videos/            # 视频目录
-│   ├── 视频1.mp4      # 对应的视频文件
-│   └── 视频2.mp4      
-└── clips/             # 输出目录（自动创建）
-```
-
-## 🤖 支持的AI模型
-
-### 推荐配置（通过中转API）
-- **Claude 3.5 Sonnet** - 最佳分析效果
-- **DeepSeek R1** - 具有思考链，分析详细
-- **GPT-4o** - OpenAI最新模型
-- **Gemini 2.5 Pro** - Google最新模型
-
-### API配置示例
-```python
-# 配置会自动保存到 .ai_config.json
-{
-    "enabled": true,
-    "base_url": "https://www.chataiapi.com/v1",
-    "api_key": "sk-your-key-here",
-    "model": "claude-3-5-sonnet-20240620"
-}
-```
+专业的电视剧短视频剪辑工具，支持AI智能分析和规则分析双模式。
 
 ## ✨ 核心功能
 
-### 1. 智能剧情分析
-- 自动识别剧情类型（法律、爱情、犯罪、家庭等）
-- AI分析戏剧冲突和情感高潮点
-- 智能推荐最精彩的片段时间点
-- 生成跨集连贯性分析
+- 🤖 **AI智能分析**: 支持多种大模型接口，智能识别精彩片段
+- 📋 **规则分析**: 基于关键词和时间的传统分析方法
+- 🔄 **混合模式**: AI分析 + 规则分析，确保最佳效果
+- 🌐 **多接口支持**: 官方API、中转API、自定义API全支持
+- 🧠 **智能推荐**: 根据使用场景自动推荐最佳配置
 
-### 2. 自动视频剪辑
-- 根据AI分析结果精准剪切视频
-- 智能匹配字幕文件和视频文件
-- 自动添加标题和说明字幕
-- 合并片段生成完整剧集合集
+## 🚀 一键启动
 
-### 3. 专业报告输出
-- 详细的AI分析报告
-- 每个片段的剪辑理由说明
-- 剧情连贯性和衔接点分析
-- 适合短视频传播的格式建议
+```bash
+python one_click_smart_start.py
+```
 
-## 🎛️ 使用流程
+这个脚本会：
+1. 🔍 自动检测现有配置
+2. 🧠 智能推荐最佳API配置
+3. ⚙️ 一键完成所有设置
+4. 🎬 直接启动剪辑系统
 
-### 基础分析流程
-1. 运行 `python main.py`
-2. 选择 "智能分析字幕"
-3. 系统自动识别所有字幕文件
-4. AI分析生成剧情片段推荐
-5. 查看生成的 `智能分析报告.txt`
+## 🌟 支持的AI模型
 
-### 完整剪辑流程
-1. 准备字幕文件和对应视频文件
-2. 配置AI接口（如未配置）
-3. 选择 "智能视频剪辑"
-4. 系统自动完成分析和剪辑
-5. 在 `clips/` 目录查看结果
+### 官方API (需要魔法上网)
+- **Google Gemini**: `gemini-2.5-pro`, `gemini-2.5-flash`
+- **OpenAI GPT**: `gpt-4o`, `gpt-4o-mini`
+- **DeepSeek**: `deepseek-r1`, `deepseek-v3`
 
-## 🔧 高级配置
+### 中转API (国内可访问)
+- **ChatAI**: 支持Claude、GPT、Gemini、DeepSeek
+- **算力云**: 支持DeepSeek、Qwen等国产模型
+- **OpenRouter**: 支持多种开源模型
 
-### 自定义AI接口
+## 📖 快速配置指南
+
+### 方法1: 智能推荐配置
 ```python
-# 支持任何OpenAI格式兼容的API
+from smart_api_selector import smart_selector
+smart_selector.smart_configure()
+```
+
+### 方法2: 快速配置ChatAI
+```python
+from quick_api_config import quick_setup_chataiapi
+quick_setup_chataiapi()
+```
+
+### 方法3: 完整交互配置
+```python
+from api_config_helper import config_helper
+config_helper.interactive_setup()
+```
+
+## 🔧 手动配置示例
+
+### ChatAI中转API配置
+```python
 config = {
-    "base_url": "https://your-api.com/v1",
-    "api_key": "your-key",
-    "model": "your-model"
+    'enabled': True,
+    'provider': 'chataiapi',
+    'api_key': 'sk-你的密钥',
+    'model': 'claude-3-5-sonnet-20240620',
+    'base_url': 'https://www.chataiapi.com/v1',
+    'api_type': 'openai_compatible'
 }
 ```
 
-### 批量处理
-系统会自动识别目录中的所有字幕文件，支持：
-- `.txt` 和 `.srt` 格式
-- 各种命名规则的文件
-- 智能集数匹配
-
-## 📊 输出说明
-
-### 分析报告格式
-```
-📺 E01: 案件调查核心冲突
-剧情类型: 法律悬疑
-推荐片段: 3 个
-
-🎬 片段 1:
-   时间: 00:15:30,000 --> 00:18:45,000
-   推荐理由: AI识别的核心戏剧冲突点
-   内容: 检察官质疑证据有效性...
+### Gemini官方API配置
+```python
+config = {
+    'enabled': True,
+    'provider': 'gemini_official',
+    'api_key': '你的Gemini密钥',
+    'model': 'gemini-2.5-flash',
+    'api_type': 'gemini_official'
+}
 ```
 
-### 视频输出
-- `E01_完整版_法律.mp4` - 单集精华版
-- `完整剧集精彩合集.mp4` - 全剧集合版
-- 各片段说明文件
+## 🎯 使用建议
 
-## 💡 技术特点
+### 🎭 电视剧剧情分析
+- **推荐**: Claude-3.5-Sonnet 或 GPT-4o
+- **特点**: 优秀的文本理解和剧情分析能力
 
-- **智能适应**: 无需预设关键词，AI自动分析剧情
-- **多模型支持**: 支持Claude、GPT、DeepSeek等多种模型
-- **跨平台兼容**: 支持各种视频格式和字幕格式
-- **专业输出**: 适合短视频平台的剪辑格式
+### 🧠 复杂逻辑推理  
+- **推荐**: DeepSeek-R1
+- **特点**: 深度思考，提供详细推理过程
 
-## 🎯 适用场景
+### ⚡ 快速响应需求
+- **推荐**: Gemini-2.5-Flash
+- **特点**: 响应速度快，成本较低
 
-- 电视剧精彩片段制作
-- 短视频内容创作
-- 剧情分析和研究
-- 自动化视频剪辑
+### 💰 成本控制
+- **推荐**: 中转API + DeepSeek系列
+- **特点**: 价格便宜，效果不错
+
+## 🛠️ 问题排查
+
+### API连接问题
+```bash
+python diagnose_api.py
+```
+
+### 重新配置
+```bash
+python quick_api_config.py
+```
+
+### 修复连接错误
+```bash
+python fix_unified_api.py
+```
+
+## 📋 使用流程
+
+1. **配置AI接口** (可选但推荐)
+2. **准备字幕文件** (SRT格式)
+3. **运行剪辑分析**
+4. **获取剪辑方案**
+5. **导出结果**
+
+## 🤝 技术支持
+
+- 配置问题: 运行诊断脚本
+- API问题: 检查密钥和网络
+- 功能建议: 欢迎反馈
 
 ---
 
-💡 **提示**: 系统会根据AI分析结果智能调整剪辑策略，无需手动设置复杂参数。
+🎬 **让AI为您的短视频创作提供专业支持！**
