@@ -23,12 +23,11 @@ def seconds_to_time(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
 def find_subtitle_files(directories: List[str] = None) -> List[str]:
-    """查找所有字幕文件"""
+    """查找所有字幕文件，按字符串排序"""
     if directories is None:
         directories = ['srt', '.']
     
     files = []
-    patterns = ['e0', 'e1', 'ep', 'episode', '第', '集', 's01e', 's1e', 'ep.', 'e.']
     
     for directory in directories:
         if not os.path.exists(directory):
@@ -36,17 +35,32 @@ def find_subtitle_files(directories: List[str] = None) -> List[str]:
             
         for f in os.listdir(directory):
             if f.endswith(('.txt', '.srt')):
-                file_lower = f.lower()
-                if any(pattern in file_lower for pattern in patterns):
-                    file_path = os.path.join(directory, f) if directory != '.' else f
-                    files.append(file_path)
+                file_path = os.path.join(directory, f) if directory != '.' else f
+                files.append(file_path)
     
+    # 按字符串排序，这样就是电视剧的顺序
     return sorted(files)
+
+def extract_episode_number(filename: str) -> str:
+    """从SRT文件名提取集数，使用文件名作为集数标识"""
+    # 移除路径和扩展名
+    basename = os.path.splitext(os.path.basename(filename))[0]
+    # 提取数字部分
+    numbers = re.findall(r'\d+', basename)
+    if numbers:
+        # 取最后一个数字作为集数
+        return numbers[-1].zfill(2)
+    return basename  # 如果没有数字，直接返回文件名
+
+def sanitize_filename(filename: str) -> str:
+    """清理文件名，移除非法字符"""
+    filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+    filename = filename.replace('：', '_').replace(' & ', '_').replace('/', '_')
+    return filename.strip()
 
 def safe_json_parse(text: str) -> Dict:
     """安全的JSON解析"""
     try:
-        # 提取JSON
         if "```json" in text:
             json_start = text.find("```json") + 7
             json_end = text.find("```", json_start)
@@ -58,26 +72,6 @@ def safe_json_parse(text: str) -> Dict:
                 json_text = text[start:end]
             else:
                 json_text = text
-
         return json.loads(json_text)
     except json.JSONDecodeError:
         return {}
-
-def validate_config(config: Dict) -> bool:
-    """验证配置有效性"""
-    required_fields = ['enabled', 'api_key', 'model', 'url']
-    return all(field in config for field in required_fields) and config.get('enabled', False)
-
-def get_episode_number(filename: str) -> str:
-    """从文件名中提取集数"""
-    match = re.search(r'[Ee](\d+)', filename)
-    if match:
-        return match.group(1)
-    return "00"
-
-def sanitize_filename(filename: str) -> str:
-    """清理文件名，移除非法字符"""
-    # 移除或替换非法字符
-    filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
-    filename = filename.replace('：', '_').replace(' & ', '_').replace('/', '_')
-    return filename.strip()
