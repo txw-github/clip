@@ -5,7 +5,7 @@ run = "python main.py"
 channel = "stable-25_05"
 
 [workflows]
-runButton = "优化AI剪辑系统"
+runButton = "统一智能剪辑系统"
 
 [[workflows.workflow]]
 name = "运行智能剪辑系统"
