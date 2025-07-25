@@ -6,6 +6,9 @@
 简洁统一的AI分析和视频剪辑工具
 """
 
+# 首先导入平台修复模块解决编码问题
+import platform_fix
+
 import os
 import re
 import json
@@ -40,8 +43,9 @@ class TVClipperSystem:
     def load_ai_config(self) -> Dict:
         """加载AI配置"""
         try:
-            with open(self.config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
+            config_content = platform_fix.safe_file_read(self.config_file)
+            if config_content:
+                config = json.loads(config_content)
                 if config.get('enabled'):
                     print(f"🤖 AI分析: 已启用 ({config.get('model', '未知模型')})")
                     return config
@@ -54,8 +58,8 @@ class TVClipperSystem:
     def save_ai_config(self, config: Dict):
         """保存AI配置"""
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
+            config_content = json.dumps(config, indent=2, ensure_ascii=False)
+            platform_fix.safe_file_write(self.config_file, config_content)
             print("✅ AI配置已保存")
         except Exception as e:
             print(f"❌ 配置保存失败: {e}")
@@ -298,15 +302,8 @@ class TVClipperSystem:
         """解析字幕文件"""
         print(f"📖 解析字幕: {os.path.basename(filepath)}")
 
-        # 读取文件内容
-        content = None
-        for encoding in ['utf-8', 'gbk', 'utf-16']:
-            try:
-                with open(filepath, 'r', encoding=encoding, errors='ignore') as f:
-                    content = f.read()
-                    break
-            except:
-                continue
+        # 使用安全的文件读取
+        content = platform_fix.safe_file_read(filepath)
 
         if not content:
             return []
@@ -454,8 +451,9 @@ class TVClipperSystem:
         cache_file = os.path.join(self.cache_folder, f"{filename}_{cache_key}.json")
         if os.path.exists(cache_file):
             try:
-                with open(cache_file, 'r', encoding='utf-8') as f:
-                    analysis = json.load(f)
+                cache_content = platform_fix.safe_file_read(cache_file)
+                if cache_content:
+                    analysis = json.loads(cache_content)
                     print(f"💾 使用缓存分析: {filename}")
                     return analysis
             except Exception as e:
@@ -466,8 +464,8 @@ class TVClipperSystem:
         """保存分析缓存"""
         cache_file = os.path.join(self.cache_folder, f"{filename}_{cache_key}.json")
         try:
-            with open(cache_file, 'w', encoding='utf-8') as f:
-                json.dump(analysis, f, ensure_ascii=False, indent=2)
+            cache_content = json.dumps(analysis, ensure_ascii=False, indent=2)
+            platform_fix.safe_file_write(cache_file, cache_content)
             print(f"💾 保存分析缓存: {filename}")
         except Exception as e:
             print(f"⚠️ 缓存保存失败: {e}")
@@ -504,7 +502,11 @@ class TVClipperSystem:
     def check_ffmpeg(self) -> bool:
         """检查FFmpeg是否可用"""
         try:
-            result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
+            result = platform_fix.safe_subprocess_run(
+                ['ffmpeg', '-version'], 
+                capture_output=True, 
+                text=True
+            )
             return result.returncode == 0
         except:
             return False
@@ -578,14 +580,20 @@ class TVClipperSystem:
                 '-y'
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = platform_fix.safe_subprocess_run(
+                cmd, 
+                capture_output=True, 
+                text=True, 
+                timeout=300
+            )
 
             if result.returncode == 0 and os.path.exists(output_path):
                 file_size = os.path.getsize(output_path) / (1024*1024)
                 print(f"   ✅ 成功: {file_size:.1f}MB")
                 return True
             else:
-                print(f"   ❌ 失败: {result.stderr[:100] if result.stderr else '未知错误'}")
+                error_msg = result.stderr[:100] if result.stderr else '未知错误'
+                print(f"   ❌ 失败: {error_msg}")
                 return False
 
         except Exception as e:
@@ -611,8 +619,7 @@ class TVClipperSystem:
 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
-            with open(narration_path, 'w', encoding='utf-8') as f:
-                f.write(content)
+            platform_fix.safe_file_write(narration_path, content)
 
             print(f"   📜 生成旁白解说: {os.path.basename(narration_path)}")
 
@@ -714,8 +721,15 @@ class TVClipperSystem:
             except ImportError:
                 print(f"📦 安装 {package}...")
                 try:
-                    subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
-                    print(f"✅ {package} 安装成功")
+                    result = platform_fix.safe_subprocess_run(
+                        [sys.executable, '-m', 'pip', 'install', package],
+                        capture_output=True,
+                        text=True
+                    )
+                    if result.returncode == 0:
+                        print(f"✅ {package} 安装成功")
+                    else:
+                        print(f"❌ {package} 安装失败: {result.stderr}")
                 except Exception as e:
                     print(f"❌ {package} 安装失败: {e}")
 
