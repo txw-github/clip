@@ -168,17 +168,18 @@ class OptimizedCompleteClipper:
         return merged
 
     def analyze_complete_episode(self, subtitles: List[Dict], episode_name: str) -> Optional[Dict]:
-        """整集分析 - 一次API调用分析整集"""
+        """整集分析 - 一次API调用分析整集，支持缓存和一致性保证"""
+        # 优先检查缓存
+        cached_analysis = self._load_analysis_cache(episode_name, subtitles)
+        if cached_analysis:
+            return cached_analysis
+        
         if not self.ai_config.get('enabled', False):
             print("⚠️ AI未启用，使用基础分析")
-            return self.basic_analysis_fallback(subtitles, episode_name)
-        
-        # 检查缓存
-        cache_path = self._get_cache_path(episode_name, subtitles)
-        cached_analysis = self._load_cache(cache_path)
-        if cached_analysis:
-            print(f"📂 使用缓存分析: {episode_name}")
-            return cached_analysis
+            analysis = self.basic_analysis_fallback(subtitles, episode_name)
+            # 即使是基础分析也要缓存
+            self._save_analysis_cache(episode_name, subtitles, analysis)
+            return analysis
         
         episode_num = self._extract_episode_number(episode_name)
         
@@ -273,8 +274,8 @@ class OptimizedCompleteClipper:
             if response:
                 analysis = self._parse_ai_response(response)
                 if analysis and self._validate_analysis(analysis, subtitles):
-                    # 保存缓存
-                    self._save_cache(cache_path, analysis)
+                    # 保存分析缓存
+                    self._save_analysis_cache(episode_name, subtitles, analysis)
                     
                     # 更新全剧上下文
                     self._update_series_context(analysis, episode_name)
@@ -330,7 +331,7 @@ class OptimizedCompleteClipper:
             return None
 
     def create_coherent_clips(self, analysis: Dict, video_file: str, episode_name: str) -> List[str]:
-        """创建连贯的短视频片段"""
+        """创建连贯的短视频片段 - 支持断点续传和一致性保证"""
         created_clips = []
         
         episode_num = analysis['episode_comprehensive_analysis']['episode_number']
@@ -340,31 +341,61 @@ class OptimizedCompleteClipper:
         print(f"📁 源视频: {os.path.basename(video_file)}")
         print(f"📊 计划创建 {len(segments)} 个连贯片段")
         
+        analysis_hash = self._get_analysis_hash(analysis)
+        print(f"🔒 分析哈希: {analysis_hash} (保证一致性)")
+        
         for i, segment in enumerate(segments):
-            clip_file = self._create_single_clip(segment, video_file, episode_num, analysis, i+1)
+            segment_id = i + 1
+            
+            # 检查是否已存在剪辑
+            existing_clip = self._check_clip_exists(episode_name, segment_id)
+            if existing_clip:
+                print(f"  ♻️ 片段{segment_id}已存在: {os.path.basename(existing_clip)}")
+                created_clips.append(existing_clip)
+                
+                # 确保旁白文件存在
+                narration_path = existing_clip.replace('.mp4', '_专业旁白.txt')
+                if not os.path.exists(narration_path):
+                    self._generate_professional_narration(segment, existing_clip, analysis)
+                continue
+            
+            # 创建新剪辑
+            clip_file = self._create_single_clip(segment, video_file, episode_num, analysis, segment_id)
             if clip_file:
                 created_clips.append(clip_file)
                 
                 # 生成专业旁白文件
                 self._generate_professional_narration(segment, clip_file, analysis)
+                
+                # 记录剪辑成功
+                print(f"  ✅ 新建片段{segment_id}: {os.path.basename(clip_file)}")
+            else:
+                print(f"  ❌ 片段{segment_id}创建失败")
         
-        # 生成集数总结
-        self._generate_episode_summary(analysis, episode_name, created_clips)
+        # 生成集数总结（仅在有新剪辑时）
+        if any(not self._check_clip_exists(episode_name, i+1) for i in range(len(segments))):
+            self._generate_episode_summary(analysis, episode_name, created_clips)
         
-        print(f"✅ 第{episode_num}集完成，创建了 {len(created_clips)} 个连贯短视频")
+        print(f"✅ 第{episode_num}集完成，总共 {len(created_clips)} 个连贯短视频")
         return created_clips
 
     def _create_single_clip(self, segment: Dict, video_file: str, episode_num: str, analysis: Dict, segment_num: int) -> Optional[str]:
-        """创建单个短视频片段"""
+        """创建单个短视频片段 - 保证一致性"""
         try:
             title = segment['title']
             start_time = segment['start_time']
             end_time = segment['end_time']
             
-            # 生成安全的文件名
-            safe_title = re.sub(r'[^\w\u4e00-\u9fff\-_]', '_', title)
-            output_name = f"E{episode_num}_{segment_num:02d}_{safe_title}.mp4"
+            # 生成一致的文件名 - 基于内容哈希确保相同analysis生成相同文件名
+            segment_hash = hashlib.md5(json.dumps(segment, sort_keys=True).encode()).hexdigest()[:8]
+            safe_title = re.sub(r'[^\w\u4e00-\u9fff\-_]', '_', title)[:20]  # 限制长度
+            output_name = f"E{episode_num}_{segment_num:02d}_{safe_title}_{segment_hash}.mp4"
             output_path = os.path.join(self.output_folder, output_name)
+            
+            # 如果文件已存在且完整，直接返回
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 1024:
+                print(f"  ♻️ 文件已存在: {output_name}")
+                return output_path
             
             print(f"  🎬 创建片段{segment_num}: {title}")
             print(f"  ⏱️ 时间: {start_time} --> {end_time}")
@@ -396,20 +427,47 @@ class OptimizedCompleteClipper:
                 '-y'
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            # 重试机制 - 最多重试3次
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                    
+                    if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1024:
+                        file_size = os.path.getsize(output_path) / (1024*1024)
+                        print(f"    ✅ 创建成功: {output_name} ({file_size:.1f}MB)")
+                        
+                        # 生成详细说明文件
+                        self._create_detailed_description(output_path, segment, analysis, episode_num)
+                        
+                        return output_path
+                    else:
+                        error_msg = result.stderr[:200] if result.stderr else "未知错误"
+                        if attempt < max_retries - 1:
+                            print(f"    ⚠️ 尝试{attempt+1}失败，重试中... {error_msg}")
+                            # 清理失败的文件
+                            if os.path.exists(output_path):
+                                os.remove(output_path)
+                        else:
+                            print(f"    ❌ 剪辑失败(尝试{max_retries}次): {error_msg}")
+                            return None
+                            
+                except subprocess.TimeoutExpired:
+                    if attempt < max_retries - 1:
+                        print(f"    ⚠️ 超时重试{attempt+1}...")
+                        if os.path.exists(output_path):
+                            os.remove(output_path)
+                    else:
+                        print(f"    ❌ 剪辑超时失败")
+                        return None
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        print(f"    ⚠️ 异常重试{attempt+1}: {e}")
+                    else:
+                        print(f"    ❌ 剪辑异常: {e}")
+                        return None
             
-            if result.returncode == 0 and os.path.exists(output_path):
-                file_size = os.path.getsize(output_path) / (1024*1024)
-                print(f"    ✅ 创建成功: {output_name} ({file_size:.1f}MB)")
-                
-                # 生成详细说明文件
-                self._create_detailed_description(output_path, segment, analysis, episode_num)
-                
-                return output_path
-            else:
-                error_msg = result.stderr[:200] if result.stderr else "未知错误"
-                print(f"    ❌ 剪辑失败: {error_msg}")
-                return None
+            return None
                 
         except Exception as e:
             print(f"❌ 创建片段出错: {e}")
@@ -598,9 +656,14 @@ class OptimizedCompleteClipper:
                     print(f"❌ 字幕解析失败")
                     continue
                 
-                # 整集分析 - 只调用一次API
-                analysis = self.analyze_complete_episode(subtitles, srt_file)
-                total_api_calls += 1
+                # 整集分析 - 支持缓存，避免重复API调用
+                cached_analysis = self._load_analysis_cache(srt_file, subtitles)
+                if cached_analysis:
+                    analysis = cached_analysis
+                    print(f"📂 使用已缓存分析")
+                else:
+                    analysis = self.analyze_complete_episode(subtitles, srt_file)
+                    total_api_calls += 1
                 
                 if not analysis:
                     print(f"❌ 分析失败")
@@ -865,29 +928,212 @@ class OptimizedCompleteClipper:
             print(f"验证分析结果出错: {e}")
             return False
 
-    def _get_cache_path(self, episode_name: str, subtitles: List[Dict]) -> str:
-        """获取缓存路径"""
+    def _get_analysis_cache_path(self, episode_name: str, subtitles: List[Dict]) -> str:
+        """获取分析结果缓存路径"""
         content_hash = hashlib.md5(str(subtitles).encode()).hexdigest()[:16]
         safe_name = re.sub(r'[^\w\-_]', '_', episode_name)
-        return os.path.join(self.cache_folder, f"{safe_name}_{content_hash}.json")
+        return os.path.join(self.cache_folder, f"analysis_{safe_name}_{content_hash}.json")
 
-    def _load_cache(self, cache_path: str) -> Optional[Dict]:
-        """加载缓存"""
+    def _get_clip_cache_path(self, episode_name: str, segment_id: int) -> str:
+        """获取剪辑缓存路径"""
+        safe_name = re.sub(r'[^\w\-_]', '_', episode_name)
+        episode_num = self._extract_episode_number(episode_name)
+        return os.path.join(self.output_folder, f"E{episode_num}_{segment_id:02d}_*.mp4")
+
+    def _get_analysis_hash(self, analysis: Dict) -> str:
+        """获取分析结果的哈希值，确保一致性"""
+        analysis_str = json.dumps(analysis, sort_keys=True, ensure_ascii=False)
+        return hashlib.md5(analysis_str.encode()).hexdigest()[:16]
+
+    def _load_analysis_cache(self, episode_name: str, subtitles: List[Dict]) -> Optional[Dict]:
+        """加载分析结果缓存"""
+        cache_path = self._get_analysis_cache_path(episode_name, subtitles)
         if os.path.exists(cache_path):
             try:
                 with open(cache_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    cached_data = json.load(f)
+                print(f"📂 使用缓存分析: {episode_name}")
+                return cached_data
+            except Exception as e:
+                print(f"⚠️ 加载分析缓存失败: {e}")
+        return None
+
+    def _save_analysis_cache(self, episode_name: str, subtitles: List[Dict], analysis: Dict):
+        """保存分析结果缓存"""
+        cache_path = self._get_analysis_cache_path(episode_name, subtitles)
+        try:
+            # 添加时间戳和一致性哈希
+            analysis_with_meta = {
+                'analysis': analysis,
+                'cache_time': datetime.now().isoformat(),
+                'analysis_hash': self._get_analysis_hash(analysis),
+                'episode_name': episode_name
+            }
+            
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                json.dump(analysis_with_meta, f, ensure_ascii=False, indent=2)
+            print(f"💾 保存分析缓存: {episode_name}")
+        except Exception as e:
+            print(f"⚠️ 保存分析缓存失败: {e}")
+
+    def _check_clip_exists(self, episode_name: str, segment_id: int) -> Optional[str]:
+        """检查剪辑是否已存在"""
+        import glob
+        
+        safe_name = re.sub(r'[^\w\-_]', '_', episode_name)
+        episode_num = self._extract_episode_number(episode_name)
+        pattern = os.path.join(self.output_folder, f"E{episode_num}_{segment_id:02d}_*.mp4")
+        
+        existing_files = glob.glob(pattern)
+        if existing_files:
+            # 检查文件完整性
+            for file_path in existing_files:
+                if os.path.exists(file_path) and os.path.getsize(file_path) > 1024:  # 至少1KB
+                    return file_path
+        return None
+
+    def _get_cache_path(self, episode_name: str, subtitles: List[Dict]) -> str:
+        """兼容方法"""
+        return self._get_analysis_cache_path(episode_name, subtitles)
+
+    def _load_cache(self, cache_path: str) -> Optional[Dict]:
+        """兼容方法"""
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, 'r', encoding='utf-8') as f:
+                    cached_data = json.load(f)
+                # 处理新格式和旧格式
+                if 'analysis' in cached_data:
+                    return cached_data['analysis']
+                else:
+                    return cached_data
             except:
                 pass
         return None
 
     def _save_cache(self, cache_path: str, analysis: Dict):
-        """保存缓存"""
+        """兼容方法"""
         try:
+            analysis_with_meta = {
+                'analysis': analysis,
+                'cache_time': datetime.now().isoformat(),
+                'analysis_hash': self._get_analysis_hash(analysis)
+            }
+            
             with open(cache_path, 'w', encoding='utf-8') as f:
-                json.dump(analysis, f, ensure_ascii=False, indent=2)
+                json.dump(analysis_with_meta, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"保存缓存失败: {e}")
+
+    def _generate_episode_summary(self, analysis: Dict, episode_name: str, created_clips: List[str]):
+        """生成集数总结"""
+        try:
+            episode_num = analysis['episode_comprehensive_analysis']['episode_number']
+            summary_path = os.path.join(self.output_folder, f"E{episode_num}_总结.txt")
+            
+            episode_analysis = analysis.get('episode_comprehensive_analysis', {})
+            continuity = analysis.get('episode_continuity', {})
+            
+            content = f"""📺 第{episode_num}集完整总结
+{"=" * 60}
+
+🎬 集数信息
+• 原文件: {episode_name}
+• 剧情类型: {episode_analysis.get('genre_detected', '通用剧情')}
+• 核心主题: {episode_analysis.get('main_theme', '核心剧情')}
+
+📊 短视频概况
+• 总片段数: {len(created_clips)} 个
+• 总观看时长: {sum(self._get_video_duration(clip) for clip in created_clips):.1f} 秒
+
+🔗 剧情连贯性
+• 前集联系: {continuity.get('previous_connection', '自然延续')}
+• 故事线索: {continuity.get('plot_threads', '主线发展')}
+• 剧情反转: {continuity.get('plot_twists', '无特别反转')}
+• 下集铺垫: {continuity.get('next_episode_setup', '自然发展')}
+
+📁 文件列表
+"""
+            
+            for i, clip_path in enumerate(created_clips, 1):
+                clip_name = os.path.basename(clip_path)
+                duration = self._get_video_duration(clip_path)
+                content += f"{i}. {clip_name} ({duration:.1f}秒)\n"
+            
+            content += f"""
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+系统版本: 优化完整智能剪辑系统 v3.0
+"""
+            
+            with open(summary_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            print(f"📋 集数总结: E{episode_num}_总结.txt")
+            
+        except Exception as e:
+            print(f"⚠️ 生成集数总结失败: {e}")
+
+    def _get_video_duration(self, video_path: str) -> float:
+        """获取视频时长"""
+        try:
+            cmd = [
+                'ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
+                '-of', 'csv=p=0', video_path
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode == 0:
+                return float(result.stdout.strip())
+        except:
+            pass
+        return 0.0
+
+    def _create_detailed_description(self, output_path: str, segment: Dict, analysis: Dict, episode_num: str):
+        """创建详细分析描述文件"""
+        try:
+            desc_path = output_path.replace('.mp4', '_详细分析.txt')
+            
+            episode_analysis = analysis.get('episode_comprehensive_analysis', {})
+            
+            content = f"""🎯 短视频详细分析
+{"=" * 50}
+
+📺 基础信息
+• 标题: {segment['title']}
+• 类型: {segment.get('segment_type', '精彩片段')}
+• 时长: {segment.get('duration_seconds', 0):.1f} 秒
+• 时间: {segment['start_time']} - {segment['end_time']}
+
+🎭 剧情分析
+• 剧情作用: {segment.get('story_purpose', '推进剧情')}
+• 重要性: {segment.get('plot_significance', '重要情节')}
+• 戏剧价值: {segment.get('dramatic_value', 0):.1f}/10
+• 情感冲击: {segment.get('emotional_impact', 0):.1f}/10
+
+🗣️ 对话完整性
+• 完整性说明: {segment.get('dialogue_completeness', '对话完整')}
+
+💡 关键时刻
+"""
+            
+            for moment in segment.get('key_moments', []):
+                content += f"• {moment.get('time', '')}: {moment.get('description', '')}\n"
+            
+            content += f"""
+📖 完整对话记录
+"""
+            
+            for dialogue in segment.get('complete_dialogues', []):
+                content += f"• {dialogue.get('speaker', '角色')}: {dialogue.get('full_dialogue', '')}\n"
+            
+            content += f"""
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+            
+            with open(desc_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+                
+        except Exception as e:
+            print(f"⚠️ 详细分析生成失败: {e}")
 
     def _generate_final_report(self, all_episodes: List[Dict], success_count: int, total_episodes: int, total_api_calls: int):
         """生成最终报告"""
