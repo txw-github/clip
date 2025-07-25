@@ -2,7 +2,7 @@ modules = ["python-3.12"]
 run = "python main.py"
 
 [nix]
-channel = "stable-24_05"
+channel = "stable-25_05"
 
 [workflows]
 runButton = "完整智能剪辑系统"
