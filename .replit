@@ -5,7 +5,7 @@ run = "python main.py"
 channel = "stable-25_05"
 
 [workflows]
-runButton = "完整智能剪辑系统"
+runButton = "完整AI剪辑系统"
 
 [[workflows.workflow]]
 name = "运行智能剪辑系统"
@@ -64,6 +64,15 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python intelligent_ai_analysis_system.py"
+
+[[workflows.workflow]]
+name = "完整AI剪辑系统"
+author = 45519989
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python start_complete_clipper.py"
 
 [deployment]
 run = ["sh", "-c", "python main.py"]
