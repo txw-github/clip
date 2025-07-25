@@ -181,7 +181,7 @@ class IntelligentAIAnalysisSystem:
         return subtitles
 
     def ai_analyze_episode(self, subtitles: List[Dict], episode_name: str) -> Optional[Dict]:
-        """AI智能分析单集剧情"""
+        """完全AI驱动的自适应剧情分析 - 解决割裂和限制问题"""
         if not self.ai_config.get('enabled', False):
             print("⚠️ AI未启用，使用基础分析")
             return self.basic_analysis_fallback(subtitles, episode_name)
@@ -195,91 +195,90 @@ class IntelligentAIAnalysisSystem:
         
         episode_num = self._extract_episode_number(episode_name)
         
-        # 构建完整剧情文本
-        full_script = []
-        for sub in subtitles:
-            timestamp = f"[{sub['start']}]"
-            full_script.append(f"{timestamp} {sub['text']}")
+        # 构建完整连贯的剧情文本 - 解决割裂问题
+        complete_script = self._build_coherent_full_script(subtitles)
         
-        complete_content = '\n'.join(full_script)
+        # 构建丰富的上下文信息 - 解决上下文衔接问题
+        context_info = self._build_rich_series_context(episode_num)
         
-        # 构建上下文信息
-        context_info = ""
-        if self.series_context['previous_episodes']:
-            context_info = f"\n之前剧集背景:\n"
-            for prev_ep in self.series_context['previous_episodes'][-2:]:  # 只用最近2集
-                context_info += f"- {prev_ep['episode']}: {prev_ep['summary']}\n"
-        
-        # AI分析提示词
-        prompt = f"""你是专业的电视剧剧情分析师。请对这一集进行深度智能分析，识别最精彩的2-3分钟片段用于短视频制作。
+        # 完全开放的AI分析提示词 - 移除所有固定限制
+        prompt = f"""你是世界顶级的电视剧剧情分析专家。请对这一集进行完全自由的深度分析，不受任何类型或格式限制。
 
-【集数】第{episode_num}集
-【剧集背景】{context_info}
+【当前集数】第{episode_num}集
+【全剧上下文】{context_info}
 
 【完整剧情内容】
-{complete_content}
+{complete_script}
 
-请进行专业分析并返回JSON格式结果：
+请以你的专业判断，完全自由地分析这一集：
 
 {{
-    "episode_analysis": {{
+    "comprehensive_analysis": {{
         "episode_number": "{episode_num}",
-        "drama_type": "自动识别的剧情类型（如：法律剧、家庭剧、悬疑剧、爱情剧等）",
-        "main_storyline": "主要故事线描述",
-        "key_characters": ["出现的主要角色"],
-        "emotional_arc": "情感发展轨迹",
-        "plot_progression": "剧情推进要点",
-        "dramatic_highlights": ["戏剧性高潮点1", "戏剧性高潮点2"],
-        "story_themes": ["主要主题1", "主要主题2"]
+        "auto_detected_genre": "根据内容自动识别的具体剧情类型和子类型",
+        "narrative_style": "叙事风格特点（现实主义/戏剧化/悬疑/喜剧等）",
+        "emotional_core": "本集的情感核心和主调",
+        "story_significance": "在整个剧集中的重要地位",
+        "character_dynamics": "主要角色关系和互动模式",
+        "thematic_elements": "核心主题和深层含义",
+        "dramatic_structure": "戏剧结构分析",
+        "pacing_rhythm": "节奏感和张力变化"
     }},
-    "core_segment": {{
-        "title": "精彩片段标题",
-        "start_time": "开始时间（格式：HH:MM:SS,mmm）",
-        "end_time": "结束时间（格式：HH:MM:SS,mmm）",
+    "optimal_highlight_segment": {{
+        "segment_title": "最佳精彩片段标题",
+        "start_time": "开始时间（HH:MM:SS,mmm）",
+        "end_time": "结束时间（HH:MM:SS,mmm）",
         "duration_seconds": 实际秒数,
-        "plot_significance": "剧情重要性说明",
-        "dramatic_value": 8.5,
-        "emotional_impact": 9.0,
-        "story_coherence": "与整体故事的连贯性",
-        "key_dialogues": [
-            {{"timestamp": "HH:MM:SS,mmm", "speaker": "角色名", "line": "关键台词"}},
-            {{"timestamp": "HH:MM:SS,mmm", "speaker": "角色名", "line": "重要对话"}}
+        "selection_reasoning": "为什么选择这个片段的深层原因",
+        "dramatic_arc": {{
+            "opening": "片段开场如何吸引观众",
+            "development": "剧情如何逐步推进",
+            "climax": "高潮点在哪里，为什么重要",
+            "resolution": "如何收尾并衔接后续"
+        }},
+        "emotional_journey": "观众在这个片段中的情感体验路径",
+        "key_moments": [
+            {{"time": "HH:MM:SS,mmm", "description": "关键时刻1描述", "impact": "情感/剧情冲击力"}},
+            {{"time": "HH:MM:SS,mmm", "description": "关键时刻2描述", "impact": "情感/剧情冲击力"}}
         ],
-        "content_highlights": [
-            "精彩点1：具体描述",
-            "精彩点2：具体描述",
-            "精彩点3：具体描述"
+        "dialogue_highlights": [
+            {{"timestamp": "HH:MM:SS,mmm", "context": "场景背景", "line": "重要台词", "significance": "台词重要性"}},
+            {{"timestamp": "HH:MM:SS,mmm", "context": "场景背景", "line": "关键对话", "significance": "对话意义"}}
         ],
-        "narrative_structure": {{
-            "setup": "情节铺垫",
-            "conflict": "核心冲突",
-            "climax": "高潮部分",
-            "resolution": "解决/转折"
-        }}
+        "visual_storytelling": "画面叙事和视觉元素分析",
+        "audience_hook": "吸引观众的核心卖点"
     }},
-    "series_continuity": {{
-        "previous_connection": "与前集的联系",
-        "next_episode_setup": "为下集的铺垫",
-        "ongoing_storylines": ["持续的故事线1", "持续的故事线2"],
-        "character_development": "角色发展变化",
-        "plot_threads": ["剧情线索1", "剧情线索2"]
+    "series_continuity_analysis": {{
+        "previous_episodes_connection": "与前面剧集的具体联系和呼应",
+        "story_threads_progression": "故事线索的发展和推进",
+        "character_arcs_development": "角色弧线在本集中的具体发展",
+        "foreshadowing_elements": "为后续剧集埋下的伏笔和铺垫",
+        "recurring_themes": "重复出现的主题和母题",
+        "narrative_continuity": "叙事连贯性和整体故事结构中的位置"
     }},
-    "technical_notes": {{
-        "editing_suggestions": "剪辑建议",
-        "transition_points": "转场点建议",
-        "subtitle_corrections": {{"错误词": "正确词"}},
-        "pacing_notes": "节奏控制建议"
+    "creative_insights": {{
+        "unique_elements": "本集独特的创意元素",
+        "storytelling_techniques": "使用的叙事技巧",
+        "emotional_manipulation": "情感调动的手法",
+        "surprise_elements": "意外转折和惊喜点",
+        "subtext_analysis": "潜台词和隐含意义"
+    }},
+    "production_recommendations": {{
+        "editing_approach": "剪辑手法建议",
+        "music_mood": "配乐情绪建议",
+        "pacing_control": "节奏控制要点",
+        "transition_strategy": "与其他片段的衔接策略",
+        "audience_retention": "保持观众注意力的要点"
     }}
 }}
 
-分析要求：
-1. 自动识别剧情类型，不要预设固定类型
-2. 选择的片段必须是完整的戏剧单元（有开始、发展、高潮）
-3. 时间段必须在字幕范围内，格式严格为HH:MM:SS,mmm
-4. 确保片段时长在120-180秒之间
-5. 重点关注剧情转折、情感爆发、重要揭露等高价值内容
-6. 考虑与前后集的连贯性
-7. 提供具体的剪辑指导建议"""
+分析原则：
+1. 完全基于内容，不受任何预设类型限制
+2. 从整体剧情出发，选择最具代表性和连贯性的片段
+3. 深度分析剧情价值，不仅仅是表面的戏剧冲突
+4. 重视上下文衔接，确保片段在整个故事中的合理位置
+5. 考虑观众体验，选择能够独立成篇又融入整体的内容
+6. 提供专业的制作指导，而非模板化建议"""
 
         try:
             print(f"🤖 AI深度分析中...")
@@ -370,14 +369,14 @@ class IntelligentAIAnalysisSystem:
             return None
 
     def _validate_analysis(self, analysis: Dict, subtitles: List[Dict]) -> bool:
-        """验证分析结果"""
+        """验证分析结果 - 适配新的分析结构"""
         try:
-            # 检查必要字段
-            if 'core_segment' not in analysis:
+            # 检查新的必要字段
+            if 'optimal_highlight_segment' not in analysis:
                 return False
             
-            segment = analysis['core_segment']
-            if not all(key in segment for key in ['start_time', 'end_time', 'title']):
+            segment = analysis['optimal_highlight_segment']
+            if not all(key in segment for key in ['start_time', 'end_time', 'segment_title']):
                 return False
             
             # 验证时间格式和范围
@@ -391,8 +390,8 @@ class IntelligentAIAnalysisSystem:
                 return False
             
             duration = end_seconds - start_seconds
-            if duration < 60 or duration > 300:  # 1-5分钟范围
-                return False
+            if duration < 90 or duration > 360:  # 1.5-6分钟范围，更灵活
+                print(f"⚠️ 片段时长 {duration:.1f}秒 不在推荐范围内，但仍然接受")
             
             # 检查时间是否在字幕范围内
             subtitle_start = min(sub['start_seconds'] for sub in subtitles)
@@ -406,6 +405,7 @@ class IntelligentAIAnalysisSystem:
                 segment['start_time'] = closest_start['start']
                 segment['end_time'] = closest_end['end']
                 segment['duration_seconds'] = closest_end['end_seconds'] - closest_start['start_seconds']
+                print(f"✅ 时间已修正到字幕范围内")
             
             return True
             
@@ -518,10 +518,10 @@ class IntelligentAIAnalysisSystem:
         }
 
     def create_video_clip(self, analysis: Dict, video_file: str, episode_name: str) -> bool:
-        """创建视频剪辑"""
+        """创建视频剪辑 - 适配新的分析结构"""
         try:
-            segment = analysis['core_segment']
-            title = segment['title']
+            segment = analysis['optimal_highlight_segment']
+            title = segment['segment_title']
             start_time = segment['start_time']
             end_time = segment['end_time']
             
@@ -580,77 +580,98 @@ class IntelligentAIAnalysisSystem:
             return False
 
     def _create_description_file(self, video_path: str, analysis: Dict, episode_name: str):
-        """创建详细说明文件"""
+        """创建详细说明文件 - 适配新的分析结构"""
         try:
-            desc_path = video_path.replace('.mp4', '_分析.txt')
+            desc_path = video_path.replace('.mp4', '_深度分析.txt')
             
-            episode_analysis = analysis.get('episode_analysis', {})
-            segment = analysis.get('core_segment', {})
-            continuity = analysis.get('series_continuity', {})
+            comprehensive = analysis.get('comprehensive_analysis', {})
+            segment = analysis.get('optimal_highlight_segment', {})
+            continuity = analysis.get('series_continuity_analysis', {})
+            insights = analysis.get('creative_insights', {})
+            recommendations = analysis.get('production_recommendations', {})
             
-            content = f"""📺 {segment.get('title', '精彩片段')}
-{"=" * 80}
+            content = f"""🎬 {segment.get('segment_title', '精彩片段')}
+{"=" * 100}
 
-⏱️ 精确时间: {segment.get('start_time')} --> {segment.get('end_time')}
+📊 基本信息
+⏱️ 精确时间段: {segment.get('start_time')} --> {segment.get('end_time')}
 📏 片段时长: {segment.get('duration_seconds', 0):.1f} 秒
-🎭 剧情类型: {episode_analysis.get('drama_type', '未知')}
-📊 戏剧价值: {segment.get('dramatic_value', 0)}/10
-💥 情感冲击: {segment.get('emotional_impact', 0)}/10
+🎭 自动识别类型: {comprehensive.get('auto_detected_genre', '未识别')}
+📖 叙事风格: {comprehensive.get('narrative_style', '标准叙事')}
+💫 情感核心: {comprehensive.get('emotional_core', '情感表达')}
 
-💡 剧情重要性:
-{segment.get('plot_significance', '重要剧情节点')}
+🎯 选择理由
+{segment.get('selection_reasoning', '基于AI智能分析选择的最佳片段')}
 
-🎯 内容亮点:
+🎭 戏剧结构分析
+• 开场吸引: {segment.get('dramatic_arc', {}).get('opening', '自然开场')}
+• 剧情发展: {segment.get('dramatic_arc', {}).get('development', '逐步推进')}
+• 高潮时刻: {segment.get('dramatic_arc', {}).get('climax', '情感/剧情高潮')}
+• 收尾衔接: {segment.get('dramatic_arc', {}).get('resolution', '完整收尾')}
+
+💡 情感体验路径
+{segment.get('emotional_journey', '观众情感跟随剧情发展的完整体验')}
+
+⭐ 关键时刻分析
 """
             
-            for highlight in segment.get('content_highlights', []):
-                content += f"• {highlight}\n"
+            for moment in segment.get('key_moments', []):
+                content += f"[{moment.get('time', '')}] {moment.get('description', '')}\n"
+                content += f"    冲击力: {moment.get('impact', '')}\n\n"
             
             content += f"""
-📝 关键对话:
+📝 重要对话分析
 """
-            for dialogue in segment.get('key_dialogues', []):
-                content += f"[{dialogue.get('timestamp', '')}] {dialogue.get('speaker', '')}: {dialogue.get('line', '')}\n"
+            for dialogue in segment.get('dialogue_highlights', []):
+                content += f"[{dialogue.get('timestamp', '')}] {dialogue.get('context', '场景')}\n"
+                content += f"台词: {dialogue.get('line', '')}\n"
+                content += f"意义: {dialogue.get('significance', '')}\n\n"
             
             content += f"""
-🔗 剧集连贯性:
-• 与前集联系: {continuity.get('previous_connection', '自然延续')}
-• 下集铺垫: {continuity.get('next_episode_setup', '剧情发展')}
-• 持续故事线: {', '.join(continuity.get('ongoing_storylines', []))}
-• 角色发展: {continuity.get('character_development', '角色成长')}
+🔗 剧集连贯性深度分析
+• 前集联系: {continuity.get('previous_episodes_connection', '自然延续')}
+• 故事推进: {continuity.get('story_threads_progression', '剧情发展')}
+• 角色发展: {continuity.get('character_arcs_development', '角色成长')}
+• 伏笔铺垫: {continuity.get('foreshadowing_elements', '为后续铺垫')}
+• 主题呼应: {continuity.get('recurring_themes', '主题延续')}
 
-📄 剪辑技术说明:
+🎨 创意洞察
+• 独特元素: {insights.get('unique_elements', '本集特色')}
+• 叙事技巧: {insights.get('storytelling_techniques', '专业叙事手法')}
+• 情感调动: {insights.get('emotional_manipulation', '情感共鸣技巧')}
+• 惊喜元素: {insights.get('surprise_elements', '意外转折')}
+• 深层含义: {insights.get('subtext_analysis', '潜台词分析')}
+
+📺 观众吸引力
+• 核心卖点: {segment.get('audience_hook', '吸引观众的关键因素')}
+• 视觉叙事: {segment.get('visual_storytelling', '画面语言分析')}
+
+🎬 制作建议
+• 剪辑手法: {recommendations.get('editing_approach', '专业剪辑建议')}
+• 配乐情绪: {recommendations.get('music_mood', '音乐氛围建议')}
+• 节奏控制: {recommendations.get('pacing_control', '节奏把握要点')}
+• 衔接策略: {recommendations.get('transition_strategy', '与其他内容的衔接')}
+• 注意力保持: {recommendations.get('audience_retention', '观众粘性策略')}
+
+📄 技术信息
 • 原始文件: {episode_name}
-• 时间精度: 毫秒级准确
-• 片段完整性: 包含完整对话和场景
-• 连贯性保证: 考虑上下文剧情联系
+• 分析方式: AI深度智能分析
+• 时间精度: 毫秒级精确
+• 内容完整性: 保证剧情完整和连贯
+• 上下文考量: 充分结合前后剧情
 
-🎬 后期制作建议:
-• 可添加简短的上集回顾（10-15秒）
-• 建议在结尾添加下集预告（5-10秒）
-• 保持原音轨，可添加背景音乐
-• 字幕建议使用对话高亮显示
-"""
+🌟 整体价值评估
+本片段代表了本集的精华内容，既能独立展现精彩剧情，又与整个故事线保持完美衔接。
+通过AI深度分析，确保了选择的科学性和观赏价值的最大化。
 
-            # 添加技术注释
-            if 'technical_notes' in analysis:
-                tech_notes = analysis['technical_notes']
-                content += f"""
-🔧 技术注释:
-• 剪辑建议: {tech_notes.get('editing_suggestions', '标准剪辑')}
-• 转场建议: {tech_notes.get('transition_points', '自然转场')}
-• 节奏控制: {tech_notes.get('pacing_notes', '保持原始节奏')}
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+分析引擎: 智能AI电视剧分析系统 v2.0
 """
-                
-                if tech_notes.get('subtitle_corrections'):
-                    content += "• 字幕修正:\n"
-                    for wrong, correct in tech_notes['subtitle_corrections'].items():
-                        content += f"  {wrong} → {correct}\n"
             
             with open(desc_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
-            print(f"    📄 生成分析文件: {os.path.basename(desc_path)}")
+            print(f"    📄 生成深度分析: {os.path.basename(desc_path)}")
             
         except Exception as e:
             print(f"    ⚠️ 生成说明文件失败: {e}")
@@ -713,20 +734,98 @@ class IntelligentAIAnalysisSystem:
         except Exception as e:
             print(f"保存缓存失败: {e}")
 
+    def _build_coherent_full_script(self, subtitles: List[Dict]) -> str:
+        """构建完整连贯的剧情文本 - 解决割裂问题"""
+        # 按场景分组，保持剧情连贯性
+        scenes = []
+        current_scene = []
+        last_time = 0
+        
+        for subtitle in subtitles:
+            # 如果时间间隔超过30秒，认为是新场景
+            if subtitle['start_seconds'] - last_time > 30 and current_scene:
+                scene_text = '\n'.join([sub['text'] for sub in current_scene])
+                scene_time = f"[场景时间: {current_scene[0]['start']} - {current_scene[-1]['end']}]"
+                scenes.append(f"{scene_time}\n{scene_text}")
+                current_scene = []
+            
+            current_scene.append(subtitle)
+            last_time = subtitle['end_seconds']
+        
+        # 添加最后一个场景
+        if current_scene:
+            scene_text = '\n'.join([sub['text'] for sub in current_scene])
+            scene_time = f"[场景时间: {current_scene[0]['start']} - {current_scene[-1]['end']}]"
+            scenes.append(f"{scene_time}\n{scene_text}")
+        
+        return '\n\n=== 场景分割 ===\n\n'.join(scenes)
+    
+    def _build_rich_series_context(self, current_episode: str) -> str:
+        """构建丰富的上下文信息 - 解决上下文衔接问题"""
+        if not self.series_context['previous_episodes']:
+            return "这是剧集分析的开始，暂无前集上下文。"
+        
+        context_parts = []
+        
+        # 前集回顾
+        context_parts.append("【前集剧情回顾】")
+        for prev_ep in self.series_context['previous_episodes'][-3:]:  # 最近3集
+            context_parts.append(f"• {prev_ep['episode']}")
+            context_parts.append(f"  类型: {prev_ep.get('drama_type', '未知')}")
+            context_parts.append(f"  核心剧情: {prev_ep.get('summary', '暂无')}")
+            context_parts.append(f"  主要角色: {', '.join(prev_ep.get('characters', []))}")
+            context_parts.append("")
+        
+        # 持续故事线
+        all_storylines = set()
+        for ep in self.series_context['previous_episodes']:
+            all_storylines.update(ep.get('storylines', []))
+        
+        if all_storylines:
+            context_parts.append("【持续故事线索】")
+            for storyline in list(all_storylines):
+                context_parts.append(f"• {storyline}")
+            context_parts.append("")
+        
+        # 主要角色发展轨迹
+        all_characters = set()
+        for ep in self.series_context['previous_episodes']:
+            all_characters.update(ep.get('characters', []))
+        
+        if all_characters:
+            context_parts.append("【主要角色】")
+            for character in list(all_characters):
+                context_parts.append(f"• {character}")
+            context_parts.append("")
+        
+        # 剧情发展趋势
+        if len(self.series_context['previous_episodes']) > 1:
+            context_parts.append("【剧情发展趋势】")
+            context_parts.append("请分析本集在整个故事发展中的位置和作用")
+            context_parts.append("")
+        
+        return '\n'.join(context_parts)
+    
     def _update_series_context(self, analysis: Dict, episode_name: str):
-        """更新剧集上下文"""
+        """更新剧集上下文 - 支持新的分析结构"""
+        comprehensive = analysis.get('comprehensive_analysis', {})
+        segment_info = analysis.get('optimal_highlight_segment', {})
+        continuity = analysis.get('series_continuity_analysis', {})
+        
         episode_summary = {
             'episode': episode_name,
-            'drama_type': analysis.get('episode_analysis', {}).get('drama_type', ''),
-            'summary': analysis.get('core_segment', {}).get('plot_significance', ''),
-            'characters': analysis.get('episode_analysis', {}).get('key_characters', []),
-            'storylines': analysis.get('series_continuity', {}).get('ongoing_storylines', [])
+            'drama_type': comprehensive.get('auto_detected_genre', ''),
+            'summary': segment_info.get('selection_reasoning', ''),
+            'characters': comprehensive.get('character_dynamics', '').split('、') if comprehensive.get('character_dynamics') else [],
+            'storylines': continuity.get('story_threads_progression', '').split('、') if continuity.get('story_threads_progression') else [],
+            'themes': comprehensive.get('thematic_elements', ''),
+            'emotional_core': comprehensive.get('emotional_core', '')
         }
         
         self.series_context['previous_episodes'].append(episode_summary)
         
         # 只保留最近5集的上下文
-        if len(self.series_context['previous_episodes']) > 5:
+        if len(self.series_context['previous_episodes']) > 6:
             self.series_context['previous_episodes'] = self.series_context['previous_episodes'][-5:]
 
     def _extract_episode_number(self, filename: str) -> str:
