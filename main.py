@@ -1,382 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""
-🎬 电视剧智能剪辑系统 - 重构版
-简洁统一的AI分析和视频剪辑工具
-"""
-
-# 首先导入平台修复模块解决编码问题
-import platform_fix
-
-import os
-import re
-import json
-import subprocess
-import hashlib
-import sys
-from typing import List, Dict, Optional
-from datetime import datetime
-
-class TVClipperSystem:
-    def __init__(self):
-        # 标准目录结构
-        self.srt_folder = "srt"
-        self.video_folder = "videos" 
-        self.output_folder = "clips"
-        self.cache_folder = "analysis_cache"
-        self.config_file = ".ai_config.json"
-
-        # 创建目录
-        for folder in [self.srt_folder, self.video_folder, self.output_folder, self.cache_folder]:
-            os.makedirs(folder, exist_ok=True)
-
-        print("🎬 电视剧智能剪辑系统")
-        print("=" * 50)
-        print(f"📁 字幕目录: {self.srt_folder}/")
-        print(f"🎬 视频目录: {self.video_folder}/")
-        print(f"📤 输出目录: {self.output_folder}/")
-
-        # 加载AI配置
-        self.ai_config = self.load_ai_config()
-
-    def load_ai_config(self) -> Dict:
-        """加载AI配置"""
-        try:
-            config_content = platform_fix.safe_file_read(self.config_file)
-            if config_content:
-                config = json.loads(config_content)
-                if config.get('enabled'):
-                    print(f"🤖 AI分析: 已启用 ({config.get('model', '未知模型')})")
-                    return config
-        except:
-            pass
-
-        print("❌ AI分析: 未配置")
-        return {'enabled': False}
-
-    def save_ai_config(self, config: Dict):
-        """保存AI配置"""
-        try:
-            config_content = json.dumps(config, indent=2, ensure_ascii=False)
-            platform_fix.safe_file_write(self.config_file, config_content)
-            print("✅ AI配置已保存")
-        except Exception as e:
-            print(f"❌ 配置保存失败: {e}")
-
-    def configure_ai_interactive(self) -> bool:
-        """交互式AI配置"""
-        print("\n🤖 AI配置向导")
-        print("=" * 40)
-
-        providers = {
-            "1": {
-                "name": "DeepSeek 官方",
-                "api_type": "official",
-                "model": "deepseek-r1"
-            },
-            "2": {
-                "name": "Gemini 官方", 
-                "api_type": "official",
-                "model": "gemini-2.5-flash"
-            },
-            "3": {
-                "name": "DeepSeek 中转",
-                "api_type": "proxy",
-                "base_url": "https://www.chataiapi.com/v1",
-                "model": "deepseek-r1"
-            },
-            "4": {
-                "name": "Claude 中转",
-                "api_type": "proxy", 
-                "base_url": "https://www.chataiapi.com/v1",
-                "model": "claude-3-5-sonnet-20240620"
-            },
-            "5": {
-                "name": "GPT-4o 中转",
-                "api_type": "proxy",
-                "base_url": "https://www.chataiapi.com/v1",
-                "model": "gpt-4o"
-            }
-        }
-
-        print("推荐的AI模型:")
-        for key, config in providers.items():
-            print(f"{key}. {config['name']}")
-
-        print("0. 跳过AI配置")
-
-        choice = input("\n请选择 (0-5): ").strip()
-
-        if choice == '0':
-            config = {'enabled': False}
-            self.save_ai_config(config)
-            self.ai_config = config
-            return True
-
-        if choice not in providers:
-            print("❌ 无效选择")
-            return False
-
-        selected = providers[choice]
-        api_key = input(f"\n输入 {selected['name']} 的API密钥: ").strip()
-
-        if not api_key:
-            print("❌ API密钥不能为空")
-            return False
-
-        # 构建配置
-        config = {
-            'enabled': True,
-            'api_type': selected['api_type'],
-            'api_key': api_key,
-            'model': selected['model']
-        }
-
-        if selected['api_type'] == 'proxy':
-            config['base_url'] = selected['base_url']
-
-        # 测试连接
-        if self.test_ai_connection(config):
-            self.save_ai_config(config)
-            self.ai_config = config
-            print(f"✅ AI配置成功！")
-            return True
-        else:
-            print("❌ 连接测试失败")
-            return False
-
-    def test_ai_connection(self, config: Dict) -> bool:
-        """测试AI连接"""
-        print("🔍 测试API连接...")
-
-        try:
-            if config['api_type'] == 'official':
-                if 'gemini' in config['model']:
-                    return self.test_gemini_official(config)
-                else:
-                    return self.test_deepseek_official(config)
-            else:
-                return self.test_proxy_api(config)
-        except Exception as e:
-            print(f"❌ 连接测试异常: {e}")
-            return False
-
-    def test_gemini_official(self, config: Dict) -> bool:
-        """测试Gemini官方API"""
-        try:
-            from google import genai
-            client = genai.Client(api_key=config['api_key'])
-            response = client.models.generate_content(
-                model=config['model'],
-                contents="hello"
-            )
-            print("✅ Gemini官方API连接成功")
-            return True
-        except ImportError:
-            print("❌ 需要安装: pip install google-genai")
-            return False
-        except Exception as e:
-            print(f"❌ Gemini测试失败: {e}")
-            return False
-
-    def test_deepseek_official(self, config: Dict) -> bool:
-        """测试DeepSeek官方API"""
-        try:
-            from openai import OpenAI
-            client = OpenAI(
-                api_key=config['api_key'],
-                base_url="https://api.deepseek.com/v1"
-            )
-            completion = client.chat.completions.create(
-                model=config['model'],
-                messages=[{'role': 'user', 'content': 'hello'}],
-                max_tokens=10
-            )
-            print("✅ DeepSeek官方API连接成功")
-            return True
-        except Exception as e:
-            print(f"❌ DeepSeek测试失败: {e}")
-            return False
-
-    def test_proxy_api(self, config: Dict) -> bool:
-        """测试中转API"""
-        try:
-            from openai import OpenAI
-            client = OpenAI(
-                api_key=config['api_key'],
-                base_url=config['base_url']
-            )
-            completion = client.chat.completions.create(
-                model=config['model'],
-                messages=[{'role': 'user', 'content': 'hello'}],
-                max_tokens=10
-            )
-            print("✅ 中转API连接成功")
-            return True
-        except Exception as e:
-            print(f"❌ 中转API测试失败: {e}")
-            return False
-
-    def call_ai_api(self, prompt: str, system_prompt: str = "") -> Optional[str]:
-        """调用AI API"""
-        if not self.ai_config.get('enabled'):
-            return None
-
-        try:
-            if self.ai_config['api_type'] == 'official':
-                if 'gemini' in self.ai_config['model']:
-                    return self.call_gemini_official(prompt, system_prompt)
-                else:
-                    return self.call_deepseek_official(prompt, system_prompt)
-            else:
-                return self.call_proxy_api(prompt, system_prompt)
-        except Exception as e:
-            print(f"⚠️ AI API调用失败: {e}")
-            return None
-
-    def call_gemini_official(self, prompt: str, system_prompt: str = "") -> Optional[str]:
-        """调用Gemini官方API"""
-        try:
-            from google import genai
-            client = genai.Client(api_key=self.ai_config['api_key'])
-            full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-            response = client.models.generate_content(
-                model=self.ai_config['model'],
-                contents=full_prompt
-            )
-            return response.text
-        except Exception as e:
-            print(f"⚠️ Gemini API失败: {e}")
-            return None
-
-    def call_deepseek_official(self, prompt: str, system_prompt: str = "") -> Optional[str]:
-        """调用DeepSeek官方API"""
-        try:
-            from openai import OpenAI
-            client = OpenAI(
-                api_key=self.ai_config['api_key'],
-                base_url="https://api.deepseek.com/v1"
-            )
-            messages = []
-            if system_prompt:
-                messages.append({'role': 'system', 'content': system_prompt})
-            messages.append({'role': 'user', 'content': prompt})
-
-            completion = client.chat.completions.create(
-                model=self.ai_config['model'],
-                messages=messages,
-                max_tokens=4000,
-                temperature=0.7
-            )
-            return completion.choices[0].message.content
-        except Exception as e:
-            print(f"⚠️ DeepSeek API失败: {e}")
-            return None
-
-    def call_proxy_api(self, prompt: str, system_prompt: str = "") -> Optional[str]:
-        """调用中转API"""
-        try:
-            from openai import OpenAI
-            client = OpenAI(
-                api_key=self.ai_config['api_key'],
-                base_url=self.ai_config['base_url']
-            )
-            messages = []
-            if system_prompt:
-                messages.append({'role': 'system', 'content': system_prompt})
-            messages.append({'role': 'user', 'content': prompt})
-
-            completion = client.chat.completions.create(
-                model=self.ai_config['model'],
-                messages=messages,
-                max_tokens=4000,
-                temperature=0.7
-            )
-            return completion.choices[0].message.content
-        except Exception as e:
-            print(f"⚠️ 中转API失败: {e}")
-            return None
-
-    def parse_subtitle_file(self, filepath: str) -> List[Dict]:
-        """解析字幕文件"""
-        print(f"📖 解析字幕: {os.path.basename(filepath)}")
-
-        # 使用安全的文件读取
-        content = platform_fix.safe_file_read(filepath)
-
-        if not content:
-            return []
-
-        # 解析字幕条目
-        subtitles = []
-        blocks = re.split(r'\n\s*\n', content.strip())
-
-        for block in blocks:
-            lines = block.strip().split('\n')
-            if len(lines) >= 3:
-                try:
-                    index = int(lines[0]) if lines[0].isdigit() else len(subtitles) + 1
-                    time_pattern = r'(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})'
-                    time_match = re.search(time_pattern, lines[1])
-
-                    if time_match:
-                        start_time = time_match.group(1).replace('.', ',')
-                        end_time = time_match.group(2).replace('.', ',')
-                        text = '\n'.join(lines[2:]).strip()
-
-                        if text:
-                            subtitles.append({
-                                'index': index,
-                                'start': start_time,
-                                'end': end_time,
-                                'text': text
-                            })
-                except:
-                    continue
-
-        print(f"✅ 解析完成: {len(subtitles)} 条字幕")
-        return subtitles
-
-    def analyze_episode_with_ai(self, subtitles: List[Dict], filename: str) -> Optional[Dict]:
-        """AI分析单集"""
-        if not self.ai_config.get('enabled'):
-            print("⏸️ AI未启用，跳过智能分析")
-            return None
-
-        # 检查缓存
-        cache_key = self.get_analysis_cache_key(subtitles)
-        cached_analysis = self.load_analysis_cache(cache_key, filename)
-        if cached_analysis:
-            return cached_analysis
-
-        episode_num = self.extract_episode_number(filename)
-
-        # 构建分析内容（取前80%避免剧透）
-        sample_size = int(len(subtitles) * 0.8)
-        context_parts = []
-        for i in range(0, sample_size, 50):
-            segment = subtitles[i:i+50]
-            segment_text = ' '.join([sub['text'] for sub in segment])
-            context_parts.append(segment_text)
-        full_context = '\n\n'.join(context_parts)
-
-        print(f"🤖 AI分析第{episode_num}集...")
-
-        prompt = f"""# 电视剧智能分析与精彩剪辑
-
-请为 **第{episode_num}集** 进行智能分析。
-
-## 当前集内容
-```
-{full_context}
-```
-
 ## 分析要求
 1. 智能识别3-5个最精彩的片段
 2. 每个片段2-3分钟，包含完整对话
 3. 确保片段间逻辑连贯
-4. 生成专业旁白解说
+4. 生成专业旁白解说和字幕提示
 
 请严格按照以下JSON格式输出：
 
@@ -395,7 +21,8 @@ class TVClipperSystem:
             "end_time": "00:XX:XX,XXX",
             "duration_seconds": 180,
             "plot_significance": "剧情重要意义",
-            "professional_narration": "完整的专业旁白解说稿"
+            "professional_narration": "完整的专业旁白解说稿",
+            "highlight_tip": "一句话字幕亮点提示"
         }}
     ]
 }}
@@ -421,7 +48,7 @@ class TVClipperSystem:
         try:
             if "```json" in response:
                 start = response.find("```json") + 7
-                end = response.find("```", start)
+                end = response.find("", start)
                 json_text = response[start:end]
             else:
                 start = response.find("{")
@@ -535,10 +162,22 @@ class TVClipperSystem:
                 continue
 
             # 剪辑视频
-            if self.create_single_clip(video_file, segment, clip_path):
-                created_clips.append(clip_path)
-                # 生成旁白文件
-                self.create_narration_file(clip_path, segment)
+            temp_clip_path = clip_path.replace(".mp4", "_temp.mp4")
+            if self.create_single_clip(video_file, segment, temp_clip_path):
+                # 添加旁白字幕
+                if self.add_narration_subtitles(temp_clip_path, segment, clip_path):
+                    created_clips.append(clip_path)
+                else:
+                    # 如果添加字幕失败，则保留原始剪辑
+                    created_clips.append(temp_clip_path)
+                    os.rename(temp_clip_path, clip_path)  # 重命名为最终文件名
+
+                # 删除临时文件
+                if os.path.exists(temp_clip_path):
+                    os.remove(temp_clip_path)
+
+            # 生成旁白文件
+            self.create_narration_file(clip_path, segment)
 
         return created_clips
 
@@ -598,6 +237,74 @@ class TVClipperSystem:
 
         except Exception as e:
             print(f"   ❌ 剪辑异常: {e}")
+            return False
+
+    def add_narration_subtitles(self, video_path: str, segment: Dict, output_path: str) -> bool:
+        """为视频添加旁白字幕"""
+        try:
+            print(f"   🎙️ 生成旁白字幕...")
+
+            # 生成旁白内容
+            narration = self.generate_segment_narration(segment)
+
+            if not narration:
+                return False
+
+            # 获取视频时长
+            video_duration = segment.get('duration_seconds', 180)
+
+            # 使用增强版旁白生成器创建字幕滤镜
+            narration_generator = EnhancedNarrationGenerator(self.ai_config)
+            subtitle_filters = narration_generator.create_subtitle_filters(narration, video_duration)
+
+            # 添加主标题（开头3秒）
+            title = segment.get('title', '精彩片段')[:30]
+            title_clean = self.clean_text_for_ffmpeg(title)
+            subtitle_filters.insert(0,
+                f"drawtext=text='{title_clean}':fontsize=28:fontcolor=white:"
+                f"x=(w-text_w)/2:y=50:box=1:boxcolor=black@0.8:boxborderw=4:"
+                f"enable='between(t,0,3)'"
+            )
+
+            if not subtitle_filters:
+                return False
+
+            # 合并所有滤镜
+            filter_complex = ",".join(subtitle_filters)
+
+            # FFmpeg命令添加字幕
+            cmd = [
+                'ffmpeg',
+                '-i', video_path,
+                '-vf', filter_complex,
+                '-c:a', 'copy',
+                '-c:v', 'libx264',
+                '-preset', 'medium',
+                '-crf', '23',
+                output_path,
+                '-y'
+            ]
+
+            result = platform_fix.safe_subprocess_run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=180
+            )
+
+            success = result.returncode == 0 and os.path.exists(output_path)
+            if success:
+                print(f"   ✅ 旁白字幕添加成功")
+                # 导出旁白文本文件
+                narration_generator.export_narration_text(narration, output_path)
+            else:
+                error_msg = result.stderr[:100] if result.stderr else '未知错误'
+                print(f"   ⚠️ 字幕添加失败: {error_msg}")
+
+            return success
+
+        except Exception as e:
+            print(f"   ⚠️ 字幕处理异常: {e}")
             return False
 
     def create_narration_file(self, video_path: str, segment: Dict):
@@ -810,24 +517,54 @@ class TVClipperSystem:
             except Exception as e:
                 print(f"❌ 操作错误: {e}")
 
-def main():
-    """主函数"""
-    try:
-        system = TVClipperSystem()
+    def generate_segment_narration(self, segment: Dict) -> Dict:
+        """生成片段旁白内容"""
+        if not self.ai_config.get('enabled'):
+            return {}
 
-        print("\n🎉 欢迎使用电视剧智能剪辑系统！")
-        print("💡 功能特点：")
-        print("   • 官方API和中转API支持")
-        print("   • 智能分析剧情内容")
-        print("   • 自动剪辑精彩片段")
-        print("   • 生成专业旁白解说")
+        try:
+            title = segment.get('title', '精彩片段')
+            plot_significance = segment.get('plot_significance', '关键剧情节点')
+            professional_narration = segment.get('professional_narration', '精彩剧情片段')
+            highlight_tip = segment.get('highlight_tip', '一句话亮点')
 
-        system.show_main_menu()
+            prompt = f"""# 旁白内容生成
 
-    except KeyboardInterrupt:
-        print("\n\n👋 程序被用户中断")
-    except Exception as e:
-        print(f"❌ 系统错误: {e}")
+请为以下电视剧片段生成更专业的旁白内容：
 
-if __name__ == "__main__":
-    main()
+## 片段信息
+• 标题: {title}
+• 剧情意义: {plot_significance}
+• 解说稿: {professional_narration}
+• 亮点提示: {highlight_tip}
+
+## 生成要求
+1. 主题解说：概括片段核心看点，1-2句话
+2. 字幕亮点：生成吸引眼球的字幕亮点提示，1句话
+
+请严格按照以下JSON格式输出：
+
+```json
+{{
+    "main_explanation": "片段核心看点",
+    "highlight_tip": "吸引眼球的字幕亮点提示"
+}}
+```"""
+
+            system_prompt = "你是专业的影视内容创作专家，专长电视剧情深度解说与叙事吸引。"
+
+            response = self.call_ai_api(prompt, system_prompt)
+            if response:
+                narration = self.parse_narration_response(response)
+                return narration
+
+        except Exception as e:
+            print(f"⚠️ 旁白生成失败: {e}")
+            return {}
+
+    def parse_narration_response(self, response: str) -> Dict:
+        """解析旁白生成响应"""
+        try:
+            if "```json" in response:
+                start = response.find("```json") + 7
+                end = response.find("
