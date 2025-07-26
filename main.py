@@ -565,6 +565,10 @@ class IntelligentTVClipper:
             print("❌ 未找到FFmpeg，无法剪辑视频")
             return []
 
+        # 获取完整字幕数据用于详细解释
+        subtitle_path = os.path.join(self.srt_folder, subtitle_filename)
+        all_subtitles = self.parse_subtitle_file(subtitle_path)
+
         for segment in analysis.get('highlight_segments', []):
             segment_id = segment['segment_id']
             title = segment['title']
@@ -583,8 +587,8 @@ class IntelligentTVClipper:
             # 剪辑视频
             temp_clip_path = clip_path.replace(".mp4", "_temp.mp4")
             if self.create_single_clip(video_file, segment, temp_clip_path):
-                # 添加旁白字幕
-                if self.add_narration_subtitles(temp_clip_path, segment, clip_path):
+                # 添加精彩字幕提示
+                if self.add_highlight_subtitles(temp_clip_path, segment, clip_path):
                     created_clips.append(clip_path)
                 else:
                     # 如果添加字幕失败，则保留原始剪辑
@@ -595,7 +599,10 @@ class IntelligentTVClipper:
                 if os.path.exists(temp_clip_path):
                     os.remove(temp_clip_path)
 
-            # 生成旁白文件
+            # 生成详细的SRT解释文件（独立文件）
+            self.create_detailed_srt_explanation(clip_path, segment, all_subtitles)
+            
+            # 生成旁白文件（附加字幕形式）
             self.create_narration_file(clip_path, segment)
 
         return created_clips
@@ -658,34 +665,54 @@ class IntelligentTVClipper:
             print(f"   ❌ 剪辑异常: {e}")
             return False
 
-    def add_narration_subtitles(self, video_path: str, segment: Dict, output_path: str) -> bool:
-        """为视频添加旁白字幕"""
+    def add_highlight_subtitles(self, video_path: str, segment: Dict, output_path: str) -> bool:
+        """为视频添加精彩字幕提示"""
         try:
-            print(f"   🎙️ 生成旁白字幕...")
+            print(f"   💡 添加精彩字幕提示...")
 
-            # 生成旁白内容
-            narration = self.generate_segment_narration(segment)
+            # 生成精彩提示内容
+            highlights = self.generate_highlight_tips(segment)
 
-            if not narration:
+            if not highlights:
+                print(f"   ⚠️ 无法生成字幕提示")
                 return False
 
             # 获取视频时长
             video_duration = segment.get('duration_seconds', 180)
 
-            # 使用增强版旁白生成器创建字幕滤镜
-            narration_generator = EnhancedNarrationGenerator(self.ai_config)
-            subtitle_filters = narration_generator.create_subtitle_filters(narration, video_duration)
+            # 构建字幕滤镜
+            subtitle_filters = []
 
-            # 添加主标题（开头3秒）
-            title = segment.get('title', '精彩片段')[:30]
+            # 1. 主标题（开头3秒）
+            title = segment.get('title', '精彩片段')[:25]
             title_clean = self.clean_text_for_ffmpeg(title)
-            subtitle_filters.insert(0,
-                f"drawtext=text='{title_clean}':fontsize=28:fontcolor=white:"
-                f"x=(w-text_w)/2:y=50:box=1:boxcolor=black@0.8:boxborderw=4:"
+            subtitle_filters.append(
+                f"drawtext=text='{title_clean}':fontsize=24:fontcolor=white:"
+                f"x=(w-text_w)/2:y=50:box=1:boxcolor=black@0.8:boxborderw=3:"
                 f"enable='between(t,0,3)'"
             )
 
+            # 2. 精彩提示1（3-8秒）
+            tip1 = self.clean_text_for_ffmpeg(highlights.get('tip1', ''))
+            if tip1:
+                subtitle_filters.append(
+                    f"drawtext=text='💡 {tip1}':fontsize=18:fontcolor=yellow:"
+                    f"x=(w-text_w)/2:y=(h-80):box=1:boxcolor=black@0.7:boxborderw=2:"
+                    f"enable='between(t,3,8)'"
+                )
+
+            # 3. 精彩提示2（最后3秒）
+            tip2 = self.clean_text_for_ffmpeg(highlights.get('tip2', ''))
+            if tip2 and video_duration > 8:
+                start_time = max(8, video_duration - 3)
+                subtitle_filters.append(
+                    f"drawtext=text='🔥 {tip2}':fontsize=18:fontcolor=lightblue:"
+                    f"x=(w-text_w)/2:y=(h-40):box=1:boxcolor=black@0.6:boxborderw=2:"
+                    f"enable='gte(t,{start_time})'"
+                )
+
             if not subtitle_filters:
+                print(f"   ⚠️ 没有有效的字幕内容")
                 return False
 
             # 合并所有滤镜
@@ -713,9 +740,7 @@ class IntelligentTVClipper:
 
             success = result.returncode == 0 and os.path.exists(output_path)
             if success:
-                print(f"   ✅ 旁白字幕添加成功")
-                # 导出旁白文本文件
-                narration_generator.export_narration_text(narration, output_path)
+                print(f"   ✅ 精彩字幕提示添加成功")
             else:
                 error_msg = result.stderr[:100] if result.stderr else '未知错误'
                 print(f"   ⚠️ 字幕添加失败: {error_msg}")
@@ -726,12 +751,119 @@ class IntelligentTVClipper:
             print(f"   ⚠️ 字幕处理异常: {e}")
             return False
 
+    def generate_highlight_tips(self, segment: Dict) -> Dict:
+        """生成精彩提示内容"""
+        try:
+            title = segment.get('title', '')
+            significance = segment.get('plot_significance', '')
+            narration = segment.get('professional_narration', '')
+            
+            # 基于内容智能生成提示
+            tips = {'tip1': '', 'tip2': ''}
+            
+            # 提示1：基于剧情意义
+            if '申诉' in significance:
+                tips['tip1'] = '申诉程序启动'
+            elif '听证会' in significance:
+                tips['tip1'] = '法庭激烈辩论'
+            elif '证据' in significance:
+                tips['tip1'] = '关键证据出现'
+            elif '真相' in significance:
+                tips['tip1'] = '真相即将揭露'
+            elif '冲突' in significance:
+                tips['tip1'] = '矛盾达到高点'
+            else:
+                tips['tip1'] = '关键剧情节点'
+            
+            # 提示2：基于标题或旁白内容
+            if '四二八' in title or '四二八' in narration:
+                tips['tip2'] = '四二八案关键进展'
+            elif '628' in title or '628' in narration:
+                tips['tip2'] = '628旧案线索'
+            elif '正当防卫' in narration:
+                tips['tip2'] = '正当防卫争议'
+            elif '法官' in narration or '检察官' in narration:
+                tips['tip2'] = '法庭精彩对话'
+            elif '父女' in narration or '亲情' in narration:
+                tips['tip2'] = '动人情感时刻'
+            else:
+                tips['tip2'] = '精彩内容值得关注'
+            
+            return tips
+            
+        except Exception as e:
+            print(f"⚠️ 生成精彩提示失败: {e}")
+            return {'tip1': '精彩片段', 'tip2': '值得关注'}
+
+    def create_detailed_srt_explanation(self, video_path: str, segment: Dict, subtitles: List[Dict]):
+        """创建详细的SRT解释文件（独立文件，不嵌入视频）"""
+        try:
+            srt_explanation_path = video_path.replace('.mp4', '_SRT详细解释.txt')
+            
+            # 获取片段对应的字幕
+            start_time = segment['start_time']
+            end_time = segment['end_time']
+            
+            segment_subtitles = []
+            for sub in subtitles:
+                sub_start = self.time_to_seconds(sub['start'])
+                segment_start = self.time_to_seconds(start_time)
+                segment_end = self.time_to_seconds(end_time)
+                
+                if segment_start <= sub_start <= segment_end:
+                    segment_subtitles.append(sub)
+            
+            content = f"""📝 {segment['title']} - SRT字幕详细解释
+{"=" * 80}
+
+⏰ 片段时间: {start_time} --> {end_time}
+📺 剧情意义: {segment.get('plot_significance', '关键剧情节点')}
+
+📖 逐句字幕解释:
+{"=" * 40}
+
+"""
+            
+            for i, sub in enumerate(segment_subtitles, 1):
+                content += f"{i:2d}. [{sub['start']} --> {sub['end']}]\n"
+                content += f"    台词: {sub['text']}\n"
+                
+                # 智能分析每句台词的重要性
+                analysis = self.analyze_dialogue_significance(sub['text'], segment)
+                if analysis:
+                    content += f"    解释: {analysis}\n"
+                content += "\n"
+            
+            # 添加整体解读
+            content += f"""
+📊 片段整体解读:
+{"=" * 40}
+• 核心看点: {segment.get('professional_narration', '精彩剧情发展')}
+• 情感基调: {self.analyze_emotional_tone_from_text(segment.get('professional_narration', ''))}
+• 剧情价值: 该片段展现了{segment.get('plot_significance', '重要剧情转折')}
+• 观众体验: 通过这个片段，观众可以深入理解角色心理和故事发展
+
+💡 通俗易懂说明:
+简单来说，这个片段就是{self.generate_simple_explanation(segment)}
+
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+            
+            platform_fix.safe_file_write(srt_explanation_path, content)
+            print(f"   📝 生成SRT详细解释: {os.path.basename(srt_explanation_path)}")
+            
+        except Exception as e:
+            print(f"   ⚠️ SRT解释文件生成失败: {e}")
+
     def create_narration_file(self, video_path: str, segment: Dict):
-        """创建专业旁白解说文件"""
+        """创建专业旁白解说文件（附加字幕形式）"""
         try:
             narration_path = video_path.replace('.mp4', '_旁白解说.txt')
 
-            content = f"""📺 {segment['title']} - 专业旁白解说
+            # 生成多层次旁白内容
+            narration_content = self.generate_layered_narration(segment)
+
+            content = f"""🎙️ {segment['title']} - 专业旁白解说
 {"=" * 60}
 
 🎬 片段信息:
@@ -739,8 +871,28 @@ class IntelligentTVClipper:
 • 时长: {segment.get('duration_seconds', 0)} 秒
 • 剧情意义: {segment.get('plot_significance', '关键剧情节点')}
 
-🎙️ 专业旁白解说稿:
-{segment.get('professional_narration', '精彩剧情片段')}
+📺 旁白内容（附加字幕形式）:
+{"=" * 40}
+
+🎤 开场解说 (0-3秒):
+{narration_content['opening']}
+
+🎤 过程解说 (3-8秒):
+{narration_content['process']}
+
+🎤 精彩提示 (最后3秒):
+{narration_content['highlight']}
+
+🎤 简短字幕提示:
+• 亮点1: {narration_content['tip1']}
+• 亮点2: {narration_content['tip2']}
+
+💬 完整旁白稿:
+{narration_content['full_script']}
+
+🎯 使用说明:
+这些旁白内容设计为"附加字幕"，可以在视频播放时以字幕形式出现，
+为观众提供额外的解释和提示，增强观看体验。
 
 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
@@ -751,6 +903,154 @@ class IntelligentTVClipper:
 
         except Exception as e:
             print(f"   ⚠️ 旁白文件生成失败: {e}")
+
+    def analyze_dialogue_significance(self, dialogue: str, segment: Dict) -> str:
+        """分析单句台词的重要性"""
+        if not dialogue or len(dialogue.strip()) < 3:
+            return ""
+        
+        # 检查是否包含关键信息
+        key_indicators = {
+            '案件': '涉及案件关键信息',
+            '证据': '重要证据相关',
+            '真相': '真相揭露时刻',
+            '法庭': '法庭程序进展',
+            '申诉': '申诉程序关键',
+            '听证会': '听证会重要内容',
+            '正当防卫': '正当防卫争议焦点',
+            '四二八': '四二八案核心内容',
+            '628': '628旧案相关',
+            '决定': '重要决策时刻',
+            '发现': '新发现或线索',
+            '问题': '关键问题提出',
+            '怎么': '疑问或质疑',
+            '为什么': '原因探究',
+            '不是': '否定或反驳',
+            '但是': '转折或对比',
+            '如果': '假设或推理'
+        }
+        
+        for keyword, explanation in key_indicators.items():
+            if keyword in dialogue:
+                return f"{explanation} - 这句话点出了{keyword}相关的重要信息"
+        
+        # 情感分析
+        if any(word in dialogue for word in ['愤怒', '生气', '激动', '着急']):
+            return "情感激烈 - 角色情绪达到高点，推动剧情发展"
+        elif any(word in dialogue for word in ['担心', '害怕', '紧张']):
+            return "情感紧张 - 营造紧张氛围，增强戏剧效果"
+        elif any(word in dialogue for word in ['感动', '温暖', '理解']):
+            return "情感温暖 - 展现人物情感深度和关系变化"
+        
+        # 对话功能分析
+        if '？' in dialogue or '吗' in dialogue:
+            return "疑问句 - 推进对话发展，引出重要信息"
+        elif '！' in dialogue:
+            return "感叹句 - 表达强烈情感，增强戏剧张力"
+        elif len(dialogue) > 20:
+            return "详细表述 - 包含重要信息或复杂情感表达"
+        
+        return "推进对话 - 维持剧情连贯性和角色互动"
+
+    def analyze_emotional_tone_from_text(self, text: str) -> str:
+        """从文本分析情感基调"""
+        if not text:
+            return "中性"
+        
+        positive_words = ['温暖', '感动', '希望', '开心', '高兴', '快乐', '幸福']
+        negative_words = ['痛苦', '悲伤', '愤怒', '绝望', '难过', '沮丧', '失望']
+        tense_words = ['紧张', '危险', '冲突', '争论', '激烈', '急迫', '关键']
+        
+        positive_count = sum(1 for word in positive_words if word in text)
+        negative_count = sum(1 for word in negative_words if word in text)
+        tense_count = sum(1 for word in tense_words if word in text)
+        
+        if tense_count > max(positive_count, negative_count):
+            return "紧张激烈"
+        elif positive_count > negative_count:
+            return "积极温暖"
+        elif negative_count > positive_count:
+            return "沉重压抑"
+        else:
+            return "平稳推进"
+
+    def generate_simple_explanation(self, segment: Dict) -> str:
+        """生成通俗易懂的解释"""
+        title = segment.get('title', '')
+        significance = segment.get('plot_significance', '')
+        
+        # 根据内容生成简单解释
+        if '申诉' in title or '申诉' in significance:
+            return "当事人开始为案件重新申请审理，希望能翻案"
+        elif '听证会' in title or '听证会' in significance:
+            return "法官听取各方意见，决定是否重新审理案件"
+        elif '证据' in title or '证据' in significance:
+            return "发现了新的重要证据，可能改变案件结果"
+        elif '真相' in title or '真相' in significance:
+            return "事情的真实情况开始浮现，之前的判断可能有误"
+        elif '冲突' in significance or '争论' in significance:
+            return "不同观点发生激烈碰撞，矛盾达到高点"
+        elif '情感' in significance:
+            return "角色的内心情感得到深度展现，触动人心"
+        else:
+            return "剧情出现重要发展，值得观众重点关注"
+
+    def generate_layered_narration(self, segment: Dict) -> Dict:
+        """生成多层次旁白内容"""
+        title = segment.get('title', '精彩片段')
+        significance = segment.get('plot_significance', '')
+        professional_narration = segment.get('professional_narration', '')
+        
+        # 开场解说
+        opening = f"接下来的片段展现了{title.split('：')[-1] if '：' in title else title}"
+        
+        # 过程解说
+        if '申诉' in significance:
+            process = "我们看到当事人正式启动法律程序，为案件寻求新的审理机会"
+        elif '听证会' in significance:
+            process = "法庭上各方激烈辩论，每一个细节都可能影响最终结果"
+        elif '证据' in significance:
+            process = "关键证据的出现，让案件出现了新的转机"
+        elif '真相' in significance:
+            process = "隐藏的真相逐渐浮出水面，事情的本质开始清晰"
+        else:
+            process = "剧情发展到关键节点，角色面临重要选择"
+        
+        # 精彩提示
+        if '法律' in significance or '案件' in significance:
+            highlight = "💡 法律智慧：注意观察法理与人情的博弈"
+        elif '情感' in significance:
+            highlight = "💡 情感共鸣：感受角色内心的复杂情感"
+        elif '冲突' in significance:
+            highlight = "💡 戏剧张力：观察矛盾如何推向高潮"
+        else:
+            highlight = "💡 剧情关键：这里的细节很重要，值得仔细观看"
+        
+        # 简短字幕提示
+        tip1 = "关键看点"
+        tip2 = "精彩时刻"
+        
+        if '证据' in significance:
+            tip1 = "新证据出现"
+            tip2 = "案件转机"
+        elif '听证会' in significance:
+            tip1 = "法庭辩论"
+            tip2 = "关键争议"
+        elif '申诉' in significance:
+            tip1 = "申诉启动"
+            tip2 = "希望重燃"
+        
+        # 完整旁白稿
+        full_script = f"{opening}。{process}。{highlight}"
+        
+        return {
+            'opening': opening,
+            'process': process,
+            'highlight': highlight,
+            'tip1': tip1,
+            'tip2': tip2,
+            'full_script': full_script
+        }
 
     def process_single_episode(self, subtitle_file: str) -> Optional[bool]:
         """处理单集完整流程"""
