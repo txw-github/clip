@@ -61,7 +61,9 @@ class IntelligentTVClipper:
         new_config = config_helper.interactive_setup()
         if new_config.get('enabled'):
             self.ai_config = new_config
-            print("✅ AI配置已更新")
+            # 保存配置
+            self.save_ai_config(new_config)
+            print("✅ AI配置已更新并保存")
         else:
             print("⚠️ AI配置未更新")
 
@@ -462,9 +464,10 @@ class IntelligentTVClipper:
                 narration_text = professional_narration
             elif isinstance(professional_narration, dict):
                 # 如果是字典，提取内容
-                narration_text = professional_narration.get('full_script', professional_narration.get('full_narration', '暂无旁白'))
+                narration_text = professional_narration.get('full_script', 
+                                                          professional_narration.get('full_narration', '暂无旁白'))
             else:
-                narration_text = '暂无旁白'
+                narration_text = str(professional_narration) if professional_narration else '暂无旁白'
 
             content = f"""🎙️ {segment['title']} - 专业旁白解说
 {"=" * 60}
@@ -511,8 +514,10 @@ class IntelligentTVClipper:
                     # 确保传递字典格式
                     if isinstance(professional_narration, str):
                         narration_dict = {'full_narration': professional_narration}
-                    else:
+                    elif isinstance(professional_narration, dict):
                         narration_dict = professional_narration
+                    else:
+                        narration_dict = {'full_narration': str(professional_narration)}
                     
                     srt_content = analyzer.generate_srt_narration(narration_dict, duration)
                 except Exception as ai_error:
