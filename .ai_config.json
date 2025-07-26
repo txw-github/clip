@@ -1,9 +1,9 @@
+
 {
-  "enabled": true,
-  "provider": "gemini_official",
-  "api_key": "AIzaSyDrKUJE79kPBPUWzyokpdVB8Jh6k0zzGLE",
-  "model": "gemini-2.5-pro",
-  "base_url": null,
-  "api_type": "gemini_official",
-  "extra_headers": {}
+  "enabled": false,
+  "api_type": "proxy",
+  "provider": "example",
+  "api_key": "your-api-key-here",
+  "base_url": "https://api.example.com/v1",
+  "model": "your-model-name"
 }
