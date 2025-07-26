@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -149,9 +148,9 @@ class SimpleAPIHelper:
     def _configure_official_api(self, model_type: str) -> Dict[str, Any]:
         """配置官方API"""
         model_config = self.ai_models[model_type]['official']
-        
+
         print(f"\n第三步：配置 {self.ai_models[model_type]['name']} 官方API")
-        
+
         # 获取API密钥
         api_key = input("请输入API密钥: ").strip()
         if not api_key:
@@ -198,17 +197,35 @@ class SimpleAPIHelper:
 
         # 测试连接
         if self._test_api_connection(config):
-            print("✅ API连接成功！")
+            print("\n" + "="*40)
+            print("✅ API配置测试通过！")
+            print("=" * 40)
+            print(f"🏷️  服务商: {self.ai_models[model_type]['name']}")
+            print(f"🤖 模型: {selected_model}")
+            print(f"🔗 类型: 官方API")
+            print("=" * 40)
             self._save_config(config)
+            print("💾 配置已保存")
             return config
         else:
-            print("❌ API连接失败")
+            print("\n" + "="*40)
+            print("❌ API配置测试失败")
+            print("=" * 40)
+            print("🔧 请检查以下项目:")
+            print("• API密钥是否正确")
+            print("• 网络连接是否正常") 
+            print("• 账户余额是否充足")
+            print("• 模型权限是否开通")
+
+            retry = input("\n是否重新配置? (y/n): ").strip().lower()
+            if retry == 'y':
+                return self._configure_official_api(model_type)
             return {'enabled': False}
 
     def _configure_proxy_api(self, model_type: str) -> Dict[str, Any]:
         """配置中转API"""
         model_config = self.ai_models[model_type]['proxy']
-        
+
         print(f"\n第三步：配置 {self.ai_models[model_type]['name']} 中转API")
 
         # 选择中转服务商
@@ -284,11 +301,33 @@ class SimpleAPIHelper:
 
         # 测试连接
         if self._test_api_connection(config):
-            print("✅ API连接成功！")
+            print("\n" + "="*40)
+            print("✅ API配置测试通过！")
+            print("=" * 40)
+            print(f"🏷️  服务商: {self.ai_models[model_type]['name']}")
+            print(f"🤖 模型: {selected_model}")
+            print(f"🔗 类型: 中转API ({provider_info['name']})")
+            print(f"🌐 地址: {base_url}")
+            print("=" * 40)
             self._save_config(config)
+            print("💾 配置已保存")
             return config
         else:
-            print("❌ API连接失败")
+            print("\n" + "="*40)
+            print("❌ API配置测试失败")
+            print("=" * 40)
+            print("🔧 请检查以下项目:")
+            print("• API密钥是否正确")
+            print("• 中转地址是否可用")
+            print("• 网络连接是否正常")
+            print("• 账户余额是否充足")
+
+            print(f"\n🌐 当前测试地址: {base_url}")
+            print(f"🔑 当前API密钥: {api_key[:10]}...")
+
+            retry = input("\n是否重新配置? (y/n): ").strip().lower()
+            if retry == 'y':
+                return self._configure_proxy_api(model_type)
             return {'enabled': False}
 
     def _test_api_connection(self, config: Dict[str, Any]) -> bool:
