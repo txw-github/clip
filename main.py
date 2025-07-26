@@ -56,232 +56,16 @@ class IntelligentTVClipper:
 
     def configure_ai_interactive(self):
         """交互式AI配置"""
-        print("\n🤖 AI接口配置")
-        print("=" * 50)
-
-        print("📝 推荐的AI模型配置:")
-        print("1. OpenAI GPT-4 (中转API)")
-        print("2. Claude 3.5 Sonnet (中转API)")
-        print("3. DeepSeek R1 (中转API)")
-        print("4. Gemini Pro (官方API)")
-        print("5. 自定义配置")
-        print("6. 🔍 测试当前连接")
-        print("0. 返回主菜单")
-
-        choice = input("\n请选择配置 (0-6): ").strip()
-
-        if choice == '0':
-            return
-        elif choice == '1':
-            self.setup_gpt4_config()
-        elif choice == '2':
-            self.setup_claude_config()
-        elif choice == '3':
-            self.setup_deepseek_config()
-        elif choice == '4':
-            self.setup_gemini_config()
-        elif choice == '5':
-            self.custom_ai_config()
-        elif choice == '6':
-            self.test_current_connection()
+        from api_config_helper import api_config
+        
+        new_config = api_config.interactive_setup()
+        if new_config.get('enabled'):
+            self.ai_config = new_config
+            print("✅ AI配置已更新")
         else:
-            print("❌ 无效选择")
+            print("⚠️ AI配置未更新")
 
-    def setup_gpt4_config(self):
-        """配置GPT-4"""
-        print("\n🚀 配置GPT-4")
-        print("推荐使用中转API: https://api.openai-proxy.com/v1")
-
-        api_key = input("请输入API密钥: ").strip()
-        if not api_key:
-            print("❌ API密钥不能为空")
-            return
-
-        base_url = input("请输入API地址 (默认: https://api.openai-proxy.com/v1): ").strip()
-        if not base_url:
-            base_url = "https://api.openai-proxy.com/v1"
-
-        config = {
-            'enabled': True,
-            'api_type': 'proxy',
-            'provider': 'openai',
-            'api_key': api_key,
-            'base_url': base_url,
-            'model': 'gpt-4'
-        }
-
-        # 测试连接
-        print("🔍 测试GPT-4 API连接...")
-        if self.test_api_connection(config):
-            if self.save_ai_config(config):
-                self.ai_config = config
-                print("✅ GPT-4配置成功！")
-            else:
-                print("❌ 配置保存失败")
-        else:
-            print("❌ GPT-4 API连接测试失败，请检查：")
-            print("  • API密钥是否正确")
-            print("  • API地址是否可用")
-            print("  • 网络连接是否正常")
-            retry = input("是否重新配置? (y/n): ").strip().lower()
-            if retry == 'y':
-                self.setup_gpt4_config()
-
-    def setup_claude_config(self):
-        """配置Claude 3.5 Sonnet"""
-        print("\n🤖 配置Claude 3.5 Sonnet")
-        print("推荐使用中转API")
-
-        api_key = input("请输入API密钥: ").strip()
-        if not api_key:
-            print("❌ API密钥不能为空")
-            return
-
-        base_url = input("请输入API地址: ").strip()
-        if not base_url:
-            print("❌ API地址不能为空")
-            return
-
-        config = {
-            'enabled': True,
-            'api_type': 'proxy',
-            'provider': 'claude',
-            'api_key': api_key,
-            'base_url': base_url,
-            'model': 'claude-3-5-sonnet-20240620'
-        }
-
-        # 测试连接
-        print("🔍 测试Claude API连接...")
-        if self.test_api_connection(config):
-            if self.save_ai_config(config):
-                self.ai_config = config
-                print("✅ Claude 3.5 Sonnet配置成功！")
-            else:
-                print("❌ 配置保存失败")
-        else:
-            print("❌ Claude API连接测试失败，请检查：")
-            print("  • API密钥是否正确")
-            print("  • API地址是否可用")
-            print("  • 网络连接是否正常")
-            retry = input("是否重新配置? (y/n): ").strip().lower()
-            if retry == 'y':
-                self.setup_claude_config()
-
-    def setup_deepseek_config(self):
-        """配置DeepSeek R1"""
-        print("\n🧠 配置DeepSeek R1")
-
-        api_key = input("请输入API密钥: ").strip()
-        if not api_key:
-            print("❌ API密钥不能为空")
-            return
-
-        base_url = input("请输入API地址: ").strip()
-        if not base_url:
-            print("❌ API地址不能为空")
-            return
-
-        config = {
-            'enabled': True,
-            'api_type': 'proxy',
-            'provider': 'deepseek',
-            'api_key': api_key,
-            'base_url': base_url,
-            'model': 'deepseek-r1'
-        }
-
-        # 测试连接
-        print("🔍 测试DeepSeek API连接...")
-        if self.test_api_connection(config):
-            if self.save_ai_config(config):
-                self.ai_config = config
-                print("✅ DeepSeek R1配置成功！")
-            else:
-                print("❌ 配置保存失败")
-        else:
-            print("❌ DeepSeek API连接测试失败，请检查：")
-            print("  • API密钥是否正确")
-            print("  • API地址是否可用")
-            print("  • 网络连接是否正常")
-            retry = input("是否重新配置? (y/n): ").strip().lower()
-            if retry == 'y':
-                self.setup_deepseek_config()
-
-    def setup_gemini_config(self):
-        """配置Gemini Pro"""
-        print("\n💎 配置Gemini Pro")
-        print("使用Google官方API")
-
-        api_key = input("请输入Google API密钥: ").strip()
-        if not api_key:
-            print("❌ API密钥不能为空")
-            return
-
-        config = {
-            'enabled': True,
-            'api_type': 'official',
-            'provider': 'gemini',
-            'api_key': api_key,
-            'model': 'gemini-pro'
-        }
-
-        # 测试连接
-        print("🔍 测试Gemini API连接...")
-        if self.test_api_connection(config):
-            if self.save_ai_config(config):
-                self.ai_config = config
-                print("✅ Gemini Pro配置成功！")
-            else:
-                print("❌ 配置保存失败")
-        else:
-            print("❌ Gemini API连接测试失败，请检查：")
-            print("  • API密钥是否正确")
-            print("  • 网络连接是否正常")
-            print("  • 是否已安装 google-generativeai 库")
-            retry = input("是否重新配置? (y/n): ").strip().lower()
-            if retry == 'y':
-                self.setup_gemini_config()
-
-    def custom_ai_config(self):
-        """自定义AI配置"""
-        print("\n⚙️ 自定义AI配置")
-
-        provider = input("请输入提供商名称 (如: openai, claude): ").strip()
-        api_key = input("请输入API密钥: ").strip()
-        base_url = input("请输入API地址: ").strip()
-        model = input("请输入模型名称: ").strip()
-
-        if not all([provider, api_key, base_url, model]):
-            print("❌ 所有字段都不能为空")
-            return
-
-        config = {
-            'enabled': True,
-            'api_type': 'proxy',
-            'provider': provider,
-            'api_key': api_key,
-            'base_url': base_url,
-            'model': model
-        }
-
-        # 测试连接
-        print(f"🔍 测试{provider} API连接...")
-        if self.test_api_connection(config):
-            if self.save_ai_config(config):
-                self.ai_config = config
-                print(f"✅ {provider}自定义配置成功！")
-            else:
-                print("❌ 配置保存失败")
-        else:
-            print(f"❌ {provider} API连接测试失败，请检查：")
-            print("  • API密钥是否正确")
-            print("  • API地址是否可用")
-            print("  • 模型名称是否正确")
-            print("  • 网络连接是否正常")
-            retry = input("是否重新配置? (y/n): ").strip().lower()
-            if retry == 'y':
-                self.custom_ai_config()
+    
 
     def save_ai_config(self, config: Dict) -> bool:
         """保存AI配置"""
@@ -358,68 +142,12 @@ class IntelligentTVClipper:
 
     def test_api_connection(self, config: Dict) -> bool:
         """测试API连接"""
-        try:
-            api_type = config.get('api_type')
-            
-            if api_type == 'official' and config.get('provider') == 'gemini':
-                return self.test_gemini_connection(config)
-            else:
-                return self.test_proxy_connection(config)
-        except Exception as e:
-            print(f"⚠️ 连接测试异常: {e}")
-            return False
-
-    def test_gemini_connection(self, config: Dict) -> bool:
-        """测试Gemini官方API连接"""
-        try:
-            try:
-                import google.generativeai as genai
-            except ImportError:
-                print("❌ 缺少google-generativeai库")
-                print("💡 正在尝试安装...")
-                try:
-                    import subprocess
-                    import sys
-                    subprocess.run([sys.executable, '-m', 'pip', 'install', 'google-generativeai'], 
-                                 check=True, capture_output=True)
-                    import google.generativeai as genai
-                    print("✅ google-generativeai库安装成功")
-                except:
-                    print("❌ 自动安装失败，请手动运行: pip install google-generativeai")
-                    return False
-            
-            genai.configure(api_key=config['api_key'])
-            model = genai.GenerativeModel(config.get('model', 'gemini-pro'))
-            
-            response = model.generate_content("hello")
-            print(f"✅ Gemini API响应: {response.text[:20]}...")
-            return True
-        except Exception as e:
-            print(f"❌ Gemini API测试失败: {e}")
-            return False
-
-    def test_proxy_connection(self, config: Dict) -> bool:
-        """测试中转API连接"""
-        try:
-            from openai import OpenAI
-            
-            client = OpenAI(
-                api_key=config['api_key'],
-                base_url=config.get('base_url')
-            )
-            
-            response = client.chat.completions.create(
-                model=config['model'],
-                messages=[{'role': 'user', 'content': 'hello'}],
-                max_tokens=10
-            )
-            
-            content = response.choices[0].message.content
-            print(f"✅ API响应: {content[:20]}...")
-            return True
-        except Exception as e:
-            print(f"❌ API测试失败: {e}")
-            return False
+        from api_config_helper import api_config
+        
+        if config.get('api_type') == 'official' and config.get('provider') == 'gemini':
+            return api_config._test_gemini_official(config)
+        else:
+            return api_config._test_openai_compatible(config)
 
     def parse_subtitle_file(self, filepath: str) -> List[Dict]:
         """解析字幕文件"""
@@ -473,69 +201,8 @@ class IntelligentTVClipper:
 
     def call_ai_api(self, prompt: str, system_prompt: str = "") -> Optional[str]:
         """统一AI API调用"""
-        if not self.ai_config.get('enabled'):
-            return None
-
-        try:
-            api_type = self.ai_config.get('api_type', 'proxy')
-
-            if api_type == 'official' and self.ai_config.get('provider') == 'gemini':
-                return self.call_gemini_api(prompt, system_prompt)
-            else:
-                return self.call_proxy_api(prompt, system_prompt)
-
-        except Exception as e:
-            print(f"⚠️ API调用失败: {e}")
-            return None
-
-    def call_gemini_api(self, prompt: str, system_prompt: str) -> Optional[str]:
-        """调用Google Gemini API"""
-        try:
-            try:
-                import google.generativeai as genai
-            except ImportError:
-                print("❌ 缺少google-generativeai库")
-                return None
-
-            genai.configure(api_key=self.ai_config['api_key'])
-            model = genai.GenerativeModel(self.ai_config.get('model', 'gemini-pro'))
-
-            full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-            response = model.generate_content(full_prompt)
-
-            return response.text
-
-        except Exception as e:
-            print(f"⚠️ Gemini API调用失败: {e}")
-            return None
-
-    def call_proxy_api(self, prompt: str, system_prompt: str) -> Optional[str]:
-        """调用中转API"""
-        try:
-            from openai import OpenAI
-
-            client = OpenAI(
-                api_key=self.ai_config['api_key'],
-                base_url=self.ai_config['base_url']
-            )
-
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
-
-            response = client.chat.completions.create(
-                model=self.ai_config['model'],
-                messages=messages,
-                max_tokens=4000,
-                temperature=0.7
-            )
-
-            return response.choices[0].message.content
-
-        except Exception as e:
-            print(f"⚠️ 中转API调用失败: {e}")
-            return None
+        from api_config_helper import api_config
+        return api_config.call_ai_api(prompt, self.ai_config, system_prompt)
 
     def analyze_episode_with_ai(self, subtitles: List[Dict], filename: str) -> Optional[Dict]:
         """使用AI分析整集"""
