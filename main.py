@@ -14,6 +14,7 @@ import subprocess
 import sys
 from typing import List, Dict, Optional
 from datetime import datetime
+from ai_analyzer import AIAnalyzer
 
 class IntelligentTVClipper:
     """智能电视剧剪辑系统"""
@@ -494,6 +495,8 @@ class IntelligentTVClipper:
                 created_clips.append(clip_path)
                 # 生成旁白文件
                 self.create_narration_file(clip_path, segment)
+                # 生成SRT字幕
+                self.create_srt_narration(clip_path, segment)
 
         return created_clips
 
@@ -560,13 +563,16 @@ class IntelligentTVClipper:
 🎬 片段信息:
 • 标题: {segment['title']}
 • 时长: {segment.get('duration_seconds', 0)} 秒
-• 剧情意义: {segment.get('plot_significance', '关键剧情节点')}
+• 重要性: {segment.get('plot_significance', '重要剧情片段')}
 
-📺 专业旁白解说稿:
-{segment.get('professional_narration', '精彩剧情片段')}
+🎙️ 专业旁白解说:
+{segment.get('professional_narration', {}).get('full_script', '暂无旁白')}
 
-💡 亮点提示:
-{segment.get('highlight_tip', '值得关注的精彩内容')}
+💡 观看提示:
+{segment.get('highlight_tip', '精彩内容值得关注')}
+
+📝 内容摘要:
+{segment.get('content_summary', '精彩剧情片段')}
 
 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
@@ -574,10 +580,40 @@ class IntelligentTVClipper:
             with open(narration_path, 'w', encoding='utf-8') as f:
                 f.write(content)
 
-            print(f"   📜 生成旁白解说: {os.path.basename(narration_path)}")
+            print(f"   📝 旁白文件: {os.path.basename(narration_path)}")
 
         except Exception as e:
-            print(f"   ⚠️ 旁白文件生成失败: {e}")
+            print(f"   ⚠️ 旁白生成失败: {e}")
+
+    def create_srt_narration(self, video_path: str, segment: Dict):
+        """创建SRT格式旁白字幕"""
+        try:
+            srt_path = video_path.replace('.mp4', '_旁白字幕.srt')
+
+            professional_narration = segment.get('professional_narration', {})
+            duration = segment.get('duration_seconds', 120)
+
+            if self.ai_config.get('enabled'):
+                analyzer = AIAnalyzer()
+                srt_content = analyzer.generate_srt_narration(professional_narration, duration)
+            else:
+                # 基础SRT生成
+                srt_content = f"""1
+00:00:00,000 --> 00:00:05,000
+{segment.get('title', '精彩片段')}
+
+2
+00:00:05,000 --> 00:00:{min(duration, 99):02d},000
+{segment.get('highlight_tip', '精彩内容正在播放')}
+"""
+
+            with open(srt_path, 'w', encoding='utf-8') as f:
+                f.write(srt_content)
+
+            print(f"   🎬 SRT字幕: {os.path.basename(srt_path)}")
+
+        except Exception as e:
+            print(f"   ⚠️ SRT生成失败: {e}")
 
     def process_single_episode(self, subtitle_file: str) -> Optional[bool]:
         """处理单集完整流程"""
@@ -592,7 +628,20 @@ class IntelligentTVClipper:
             return False
 
         # 2. AI分析
-        analysis = self.analyze_episode_with_ai(subtitles, subtitle_file)
+        if self.ai_config.get('enabled'):
+            analyzer = AIAnalyzer()
+            analysis = analyzer.analyze_episode_with_fixed_format(
+                subtitles,
+                episode_context=f"第{self.extract_episode_number(subtitle_file)}集",
+                ai_config=self.ai_config
+            )
+            if not analysis:
+                print(f"❌ AI分析失败，跳过此集")
+                return False
+        else:
+            analysis = None
+            print(f"⚠️ AI未启用，跳过 {subtitle_file} 的AI分析")
+
         if analysis is None:
             print(f"⏸️ AI不可用，{subtitle_file} 已跳过")
             return None
