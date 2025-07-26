@@ -462,10 +462,17 @@ class IntelligentTVClipper:
         for segment in analysis.get('segments', []):
             segment_id = segment.get('id', 1)
             title = segment.get('title', '精彩片段')
+            episode_name = self.extract_episode_number(srt_filename)
             
-            # 生成安全文件名
-            safe_title = re.sub(r'[^\w\u4e00-\u9fff\-_]', '_', title)
-            clip_filename = f"{safe_title}_seg{segment_id}.mp4"
+            # 生成更安全的文件名，避免特殊字符
+            safe_title = re.sub(r'[^\w\u4e00-\u9fff]', '_', title)
+            safe_title = safe_title.replace('__', '_').strip('_')
+            
+            # 限制文件名长度
+            if len(safe_title) > 50:
+                safe_title = safe_title[:50]
+            
+            clip_filename = f"{episode_name}_{safe_title}_seg{segment_id}.mp4"
             clip_path = os.path.join(self.clips_folder, clip_filename)
             
             # 检查是否已存在
@@ -515,16 +522,50 @@ class IntelligentTVClipper:
                 '-y'
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            # 修复Windows编码问题
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'utf-8'
+            
+            # 使用适当的编码参数
+            if sys.platform.startswith('win'):
+                # Windows特殊处理
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=300,
+                    encoding='utf-8',
+                    errors='ignore',
+                    env=env,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                )
+            else:
+                # Unix/Linux系统
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=300,
+                    encoding='utf-8',
+                    errors='ignore',
+                    env=env
+                )
             
             if result.returncode == 0 and os.path.exists(output_path):
                 file_size = os.path.getsize(output_path) / (1024*1024)
                 print(f"   ✅ 成功: {file_size:.1f}MB")
                 return True
             else:
-                print(f"   ❌ 失败: {result.stderr[:100] if result.stderr else '未知错误'}")
+                error_msg = result.stderr[:100] if result.stderr else '未知错误'
+                print(f"   ❌ 失败: {error_msg}")
                 return False
         
+        except subprocess.TimeoutExpired:
+            print(f"   ❌ 剪辑超时")
+            return False
+        except UnicodeDecodeError as e:
+            print(f"   ❌ 编码错误: {e}")
+            return False
         except Exception as e:
             print(f"   ❌ 剪辑异常: {e}")
             return False
@@ -723,6 +764,15 @@ class IntelligentTVClipper:
 
 def main():
     """主函数"""
+    # 修复Windows编码问题
+    if sys.platform.startswith('win'):
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        try:
+            import locale
+            locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+        except:
+            pass
+    
     # 检查并安装依赖
     print("🔧 检查依赖...")
     try:
