@@ -65,9 +65,10 @@ class IntelligentTVClipper:
         print("3. DeepSeek R1 (中转API)")
         print("4. Gemini Pro (官方API)")
         print("5. 自定义配置")
+        print("6. 🔍 测试当前连接")
         print("0. 返回主菜单")
 
-        choice = input("\n请选择配置 (0-5): ").strip()
+        choice = input("\n请选择配置 (0-6): ").strip()
 
         if choice == '0':
             return
@@ -81,6 +82,8 @@ class IntelligentTVClipper:
             self.setup_gemini_config()
         elif choice == '5':
             self.custom_ai_config()
+        elif choice == '6':
+            self.test_current_connection()
         else:
             print("❌ 无效选择")
 
@@ -222,6 +225,124 @@ class IntelligentTVClipper:
             return True
         except Exception as e:
             print(f"❌ 配置保存失败: {e}")
+            return False
+
+    def test_current_connection(self):
+        """测试当前AI连接"""
+        print("\n🔍 AI连接测试")
+        print("=" * 40)
+        
+        if not self.ai_config.get('enabled'):
+            print("❌ 未找到AI配置")
+            print("💡 请先配置AI接口")
+            input("\n按回车键返回...")
+            return
+        
+        print("📋 当前配置信息:")
+        print(f"   🏷️  服务商: {self.ai_config.get('provider', '未知')}")
+        print(f"   🤖 模型: {self.ai_config.get('model', '未知')}")
+        print(f"   🔗 类型: {self.ai_config.get('api_type', '未知')}")
+        if self.ai_config.get('base_url'):
+            print(f"   🌐 地址: {self.ai_config['base_url']}")
+        print(f"   🔑 密钥: {self.ai_config.get('api_key', '')[:10]}...")
+        print()
+        
+        # 执行连接测试
+        print("🔍 正在测试连接...")
+        success = self.test_api_connection(self.ai_config)
+        
+        if success:
+            print("\n" + "="*50)
+            print("🎉 连接测试成功！AI接口工作正常")
+            print("=" * 50)
+            
+            # 进行功能测试
+            print("\n🧪 进行功能测试...")
+            test_prompt = "请简单介绍一下电视剧剧情分析的重要性，回复不超过50字"
+            
+            try:
+                response = self.call_ai_api(test_prompt, "你是专业的影视分析师")
+                if response:
+                    print("✅ AI功能测试成功")
+                    print(f"📝 AI回复预览: {response[:100]}...")
+                else:
+                    print("⚠️  AI功能测试失败，但连接正常")
+            except Exception as e:
+                print(f"⚠️  AI功能测试异常: {e}")
+                
+        else:
+            print("\n" + "="*50)
+            print("❌ 连接测试失败")
+            print("=" * 50)
+            print("🔧 建议解决方案:")
+            print("1. 检查网络连接")
+            print("2. 验证API密钥")
+            print("3. 确认服务商状态")
+            print("4. 重新配置API")
+            
+            provider = self.ai_config.get('provider', '')
+            if provider == 'openai':
+                print("\n📞 OpenAI状态页: https://status.openai.com/")
+            elif provider == 'deepseek':
+                print("\n📞 DeepSeek文档: https://platform.deepseek.com/")
+            elif provider == 'gemini':
+                print("\n📞 Google AI文档: https://ai.google.dev/")
+        
+        input("\n按回车键返回...")
+
+    def test_api_connection(self, config: Dict) -> bool:
+        """测试API连接"""
+        try:
+            api_type = config.get('api_type')
+            
+            if api_type == 'official' and config.get('provider') == 'gemini':
+                return self.test_gemini_connection(config)
+            else:
+                return self.test_proxy_connection(config)
+        except Exception as e:
+            print(f"⚠️ 连接测试异常: {e}")
+            return False
+
+    def test_gemini_connection(self, config: Dict) -> bool:
+        """测试Gemini官方API连接"""
+        try:
+            import google.generativeai as genai
+            
+            genai.configure(api_key=config['api_key'])
+            model = genai.GenerativeModel(config.get('model', 'gemini-pro'))
+            
+            response = model.generate_content("hello")
+            print(f"✅ Gemini API响应: {response.text[:20]}...")
+            return True
+        except ImportError:
+            print("❌ 缺少google-generativeai库")
+            print("💡 请运行: pip install google-generativeai")
+            return False
+        except Exception as e:
+            print(f"❌ Gemini API测试失败: {e}")
+            return False
+
+    def test_proxy_connection(self, config: Dict) -> bool:
+        """测试中转API连接"""
+        try:
+            from openai import OpenAI
+            
+            client = OpenAI(
+                api_key=config['api_key'],
+                base_url=config.get('base_url')
+            )
+            
+            response = client.chat.completions.create(
+                model=config['model'],
+                messages=[{'role': 'user', 'content': 'hello'}],
+                max_tokens=10
+            )
+            
+            content = response.choices[0].message.content
+            print(f"✅ API响应: {content[:20]}...")
+            return True
+        except Exception as e:
+            print(f"❌ API测试失败: {e}")
             return False
 
     def parse_subtitle_file(self, filepath: str) -> List[Dict]:
@@ -769,13 +890,22 @@ class IntelligentTVClipper:
             print("=" * 60)
 
             # 显示当前状态
-            ai_status = "🤖 已配置" if self.ai_config.get('enabled') else "❌ 未配置"
             if self.ai_config.get('enabled'):
-                model = self.ai_config.get('model', '未知模型')
                 provider = self.ai_config.get('provider', '未知')
-                print(f"AI状态: {ai_status} ({provider} - {model})")
+                model = self.ai_config.get('model', '未知模型')
+                ai_status = f"🤖 已配置 ({provider} - {model})"
+                
+                # 显示连接状态指示
+                try:
+                    # 快速测试连接状态（不输出详细信息）
+                    test_success = self.test_api_connection(self.ai_config)
+                    connection_status = "🟢 连接正常" if test_success else "🔴 连接异常"
+                except:
+                    connection_status = "🟡 状态未知"
+                
+                print(f"AI状态: {ai_status} {connection_status}")
             else:
-                print(f"AI状态: {ai_status}")
+                print(f"AI状态: ❌ 未配置")
 
             # 检查文件状态
             srt_count = len([f for f in os.listdir(self.srt_folder) if f.endswith(('.srt', '.txt'))])
@@ -789,10 +919,15 @@ class IntelligentTVClipper:
             print("2. 🎬 开始智能剪辑")
             print("3. 📁 查看详细文件状态")
             print("4. 📖 查看使用教程")
-            print("0. ❌ 退出系统")
+            if self.ai_config.get('enabled'):
+                print("5. 🔍 测试AI连接")
+                print("0. ❌ 退出系统")
+            else:
+                print("0. ❌ 退出系统")
 
             try:
-                choice = input("\n请选择操作 (0-4): ").strip()
+                max_choice = "5" if self.ai_config.get('enabled') else "4"
+                choice = input(f"\n请选择操作 (0-{max_choice}): ").strip()
 
                 if choice == '1':
                     self.configure_ai_interactive()
@@ -807,11 +942,13 @@ class IntelligentTVClipper:
                     self.show_file_status()
                 elif choice == '4':
                     self.show_usage_guide()
+                elif choice == '5' and self.ai_config.get('enabled'):
+                    self.test_current_connection()
                 elif choice == '0':
                     print("\n👋 感谢使用智能电视剧剪辑系统！")
                     break
                 else:
-                    print("❌ 无效选择，请输入0-4")
+                    print(f"❌ 无效选择，请输入0-{max_choice}")
 
             except KeyboardInterrupt:
                 print("\n\n👋 用户中断，程序退出")
