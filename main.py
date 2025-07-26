@@ -56,9 +56,9 @@ class IntelligentTVClipper:
 
     def configure_ai_interactive(self):
         """交互式AI配置"""
-        from api_config_helper import api_config
+        from api_config_helper import config_helper
         
-        new_config = api_config.interactive_setup()
+        new_config = config_helper.interactive_setup()
         if new_config.get('enabled'):
             self.ai_config = new_config
             print("✅ AI配置已更新")
@@ -142,12 +142,12 @@ class IntelligentTVClipper:
 
     def test_api_connection(self, config: Dict) -> bool:
         """测试API连接"""
-        from api_config_helper import api_config
+        from api_config_helper import config_helper
         
         if config.get('api_type') == 'official' and config.get('provider') == 'gemini':
-            return api_config._test_gemini_official(config)
+            return config_helper._test_gemini_official(config)
         else:
-            return api_config._test_openai_compatible(config)
+            return config_helper._test_openai_compatible(config)
 
     def parse_subtitle_file(self, filepath: str) -> List[Dict]:
         """解析字幕文件"""
@@ -201,8 +201,8 @@ class IntelligentTVClipper:
 
     def call_ai_api(self, prompt: str, system_prompt: str = "") -> Optional[str]:
         """统一AI API调用"""
-        from api_config_helper import api_config
-        return api_config.call_ai_api(prompt, self.ai_config, system_prompt)
+        from api_config_helper import config_helper
+        return config_helper.call_ai_api(prompt, self.ai_config, system_prompt)
 
     def analyze_episode_with_ai(self, subtitles: List[Dict], filename: str) -> Optional[Dict]:
         """使用AI分析整集"""

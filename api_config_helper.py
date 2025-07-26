@@ -386,6 +386,7 @@ class SimpleAPIConfig:
 
 # 全局实例
 api_config = SimpleAPIConfig()
+config_helper = api_config  # 为向后兼容提供config_helper别名
 
 # 向后兼容
 def call_ai_api(prompt: str, config: Dict[str, Any], system_prompt: str = "") -> Optional[str]:
