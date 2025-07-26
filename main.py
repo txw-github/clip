@@ -147,19 +147,31 @@ class IntelligentTVClipper:
     def configure_ai_interactive(self):
         """交互式AI配置"""
         print("\n🤖 AI接口配置")
-        print("=" * 40)
+        print("=" * 50)
         
-        # 选择API类型
-        print("请选择API类型:")
-        print("1. 官方API (Google Gemini, OpenAI等)")
-        print("2. 中转API (支持多种模型)")
+        # 显示推荐配置
+        print("📝 推荐的AI模型配置:")
+        print("1. Claude 3.5 Sonnet (中转API) - 推荐")
+        print("2. DeepSeek R1 (中转API) - 思考链模型")
+        print("3. GPT-4o (中转API)")
+        print("4. Gemini 2.5 Pro (中转API)")
+        print("5. 自定义配置")
+        print("0. 返回主菜单")
         
-        choice = input("请选择 (1-2): ").strip()
+        choice = input("\n请选择配置 (0-5): ").strip()
         
-        if choice == '1':
-            self.configure_official_api()
+        if choice == '0':
+            return
+        elif choice == '1':
+            self.setup_claude_config()
         elif choice == '2':
-            self.configure_proxy_api()
+            self.setup_deepseek_config()
+        elif choice == '3':
+            self.setup_gpt4_config()
+        elif choice == '4':
+            self.setup_gemini_config()
+        elif choice == '5':
+            self.custom_ai_config()
         else:
             print("❌ 无效选择")
 
@@ -185,6 +197,157 @@ class IntelligentTVClipper:
             'provider': provider,
             'api_key': api_key,
             'model': model
+
+
+    def setup_claude_config(self):
+        """配置Claude 3.5 Sonnet"""
+        print("\n🤖 配置Claude 3.5 Sonnet")
+        print("推荐使用中转API: https://www.chataiapi.com/")
+        
+        api_key = input("请输入API密钥: ").strip()
+        if not api_key:
+            print("❌ API密钥不能为空")
+            return
+        
+        config = {
+            'enabled': True,
+            'api_type': 'proxy',
+            'provider': 'claude',
+            'api_key': api_key,
+            'base_url': 'https://www.chataiapi.com/v1',
+            'model': 'claude-3-5-sonnet-20240620'
+        }
+        
+        if self.save_ai_config(config):
+            self.ai_config = config
+            print("✅ Claude 3.5 Sonnet配置成功！")
+
+    def setup_deepseek_config(self):
+        """配置DeepSeek R1"""
+        print("\n🧠 配置DeepSeek R1 (思考链模型)")
+        print("推荐使用中转API: https://www.chataiapi.com/")
+        
+        api_key = input("请输入API密钥: ").strip()
+        if not api_key:
+            print("❌ API密钥不能为空")
+            return
+        
+        config = {
+            'enabled': True,
+            'api_type': 'proxy',
+            'provider': 'deepseek',
+            'api_key': api_key,
+            'base_url': 'https://www.chataiapi.com/v1',
+            'model': 'deepseek-r1'
+        }
+        
+        if self.save_ai_config(config):
+            self.ai_config = config
+            print("✅ DeepSeek R1配置成功！")
+
+    def setup_gpt4_config(self):
+        """配置GPT-4o"""
+        print("\n🚀 配置GPT-4o")
+        print("推荐使用中转API: https://www.chataiapi.com/")
+        
+        api_key = input("请输入API密钥: ").strip()
+        if not api_key:
+            print("❌ API密钥不能为空")
+            return
+        
+        config = {
+            'enabled': True,
+            'api_type': 'proxy',
+            'provider': 'openai',
+            'api_key': api_key,
+            'base_url': 'https://www.chataiapi.com/v1',
+            'model': 'gpt-4o'
+        }
+        
+        if self.save_ai_config(config):
+            self.ai_config = config
+            print("✅ GPT-4o配置成功！")
+
+    def setup_gemini_config(self):
+        """配置Gemini 2.5 Pro"""
+        print("\n💎 配置Gemini 2.5 Pro")
+        print("推荐使用中转API: https://www.chataiapi.com/")
+        
+        api_key = input("请输入API密钥: ").strip()
+        if not api_key:
+            print("❌ API密钥不能为空")
+            return
+        
+        config = {
+            'enabled': True,
+            'api_type': 'proxy',
+            'provider': 'gemini',
+            'api_key': api_key,
+            'base_url': 'https://www.chataiapi.com/v1',
+            'model': 'gemini-2.5-pro'
+        }
+        
+        if self.save_ai_config(config):
+            self.ai_config = config
+            print("✅ Gemini 2.5 Pro配置成功！")
+
+    def custom_ai_config(self):
+        """自定义AI配置"""
+        print("\n⚙️ 自定义AI配置")
+        print("=" * 30)
+        
+        # 选择API类型
+        print("选择API类型:")
+        print("1. 官方API (需要官方密钥)")
+        print("2. 中转API (推荐)")
+        
+        api_type_choice = input("请选择 (1-2): ").strip()
+        
+        if api_type_choice == '1':
+            self.configure_official_api()
+        elif api_type_choice == '2':
+            self.configure_proxy_api()
+        else:
+            print("❌ 无效选择")
+
+    def show_usage_guide(self):
+        """显示使用教程"""
+        print("\n📖 使用教程")
+        print("=" * 50)
+        print("""
+🎯 快速开始:
+1. 将字幕文件(.srt/.txt)放在 srt/ 目录
+2. 将对应视频文件(.mp4/.mkv/.avi)放在 videos/ 目录
+3. 配置AI接口 (推荐Claude 3.5 Sonnet)
+4. 运行智能剪辑
+
+📁 目录结构:
+项目根目录/
+├── srt/              # 字幕目录
+│   ├── EP01.srt
+│   └── EP02.srt
+├── videos/           # 视频目录
+│   ├── EP01.mp4
+│   └── EP02.mp4
+└── clips/            # 输出目录 (自动创建)
+
+🤖 AI配置说明:
+• 推荐使用中转API，稳定且支持多种模型
+• Claude 3.5 Sonnet: 分析效果最佳
+• DeepSeek R1: 具有思考链，分析详细
+• GPT-4o: OpenAI最新模型
+
+💡 使用技巧:
+• 字幕文件名决定集数顺序 (按字符串排序)
+• 确保视频和字幕文件名对应
+• 系统会自动修正字幕中的错别字
+• 每集生成3-5个2-3分钟的精彩片段
+
+📄 详细教程: 智能AI剪辑系统使用教程.md
+        """)
+        input("\n按回车键返回主菜单...")
+
+
         }
         
         if self.save_ai_config(config):
@@ -1195,28 +1358,46 @@ class IntelligentTVClipper:
     def show_main_menu(self):
         """主菜单"""
         while True:
-            print("\n" + "=" * 50)
-            print("🎬 电视剧智能剪辑系统")
-            print("=" * 50)
+            print("\n" + "=" * 60)
+            print("🎬 智能电视剧剪辑系统")
+            print("=" * 60)
 
-            # 显示状态
+            # 显示当前状态
             ai_status = "🤖 已配置" if self.ai_config.get('enabled') else "❌ 未配置"
-            print(f"AI状态: {ai_status}")
+            if self.ai_config.get('enabled'):
+                model = self.ai_config.get('model', '未知模型')
+                provider = self.ai_config.get('provider', '未知')
+                print(f"AI状态: {ai_status} ({provider} - {model})")
+            else:
+                print(f"AI状态: {ai_status}")
+
+            # 检查文件状态
+            srt_count = len([f for f in os.listdir(self.srt_folder) if f.endswith(('.srt', '.txt'))])
+            video_count = len([f for f in os.listdir(self.video_folder) if f.endswith(('.mp4', '.mkv', '.avi'))])
+            clips_count = len([f for f in os.listdir(self.output_folder) if f.endswith('.mp4')])
+            
+            print(f"文件状态: 📝{srt_count}个字幕 🎬{video_count}个视频 📤{clips_count}个片段")
 
             print("\n🎯 主要功能:")
             print("1. 🤖 配置AI接口")
             print("2. 🎬 开始智能剪辑")
-            print("3. 📁 查看文件状态")
+            print("3. 📁 查看详细文件状态")
             print("4. 🔧 安装系统依赖")
             print("5. 🔄 清空分析缓存")
+            print("6. 📖 查看使用教程")
             print("0. ❌ 退出系统")
 
             try:
-                choice = input("\n请选择操作 (0-5): ").strip()
+                choice = input("\n请选择操作 (0-6): ").strip()
 
                 if choice == '1':
                     self.configure_ai_interactive()
                 elif choice == '2':
+                    if not self.ai_config.get('enabled'):
+                        print("\n⚠️ 建议先配置AI接口以获得更好的分析效果")
+                        confirm = input("是否继续使用基础分析？(y/n): ").strip().lower()
+                        if confirm != 'y':
+                            continue
                     self.process_all_episodes()
                 elif choice == '3':
                     self.show_file_status()
@@ -1224,17 +1405,20 @@ class IntelligentTVClipper:
                     self.install_dependencies()
                 elif choice == '5':
                     self.clear_cache()
+                elif choice == '6':
+                    self.show_usage_guide()
                 elif choice == '0':
-                    print("\n👋 感谢使用电视剧智能剪辑系统！")
+                    print("\n👋 感谢使用智能电视剧剪辑系统！")
                     break
                 else:
-                    print("❌ 无效选择，请输入0-5")
+                    print("❌ 无效选择，请输入0-6")
 
             except KeyboardInterrupt:
-                print("\n\n👋 用户中断")
+                print("\n\n👋 用户中断，程序退出")
                 break
             except Exception as e:
                 print(f"❌ 操作错误: {e}")
+                input("按回车键继续...")
 
     def generate_segment_narration(self, segment: Dict) -> Dict:
         """生成片段旁白内容"""
@@ -1308,12 +1492,21 @@ def main():
     """主函数"""
     import sys
     
+    # 安装必要依赖
+    print("🔧 检查依赖...")
+    import subprocess
+    try:
+        subprocess.run([sys.executable, '-m', 'pip', 'install', 'requests'], check=False, capture_output=True)
+    except:
+        pass
+    
     clipper = IntelligentTVClipper()
     
-    if len(sys.argv) > 1 and sys.argv[1] == '--menu':
-        clipper.show_main_menu()
-    else:
+    # 总是显示菜单，除非指定直接运行
+    if len(sys.argv) > 1 and sys.argv[1] == '--direct':
         clipper.process_all_episodes()
+    else:
+        clipper.show_main_menu()
 
 if __name__ == "__main__":
     main()
