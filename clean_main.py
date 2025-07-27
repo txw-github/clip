@@ -85,6 +85,9 @@ class IntelligentTVClipperSystem:
             'character_arcs': {},
             'ongoing_conflicts': []
         }
+        
+        # 每集分析上下文
+        self.episode_contexts = {}
 
         # 检测到的剧情类型
         self.detected_genre = None #add detected_genre
@@ -471,46 +474,81 @@ class IntelligentTVClipperSystem:
         self.genre_confidence = 0.5 #add
         return '通用剧' #add
 
-    def analyze_with_ai(self, subtitles: List[Dict], episode_num: str) -> Optional[Dict]:
-        """使用AI分析剧情点"""
+    def analyze_with_ai(self, subtitles: List[Dict], episode_num: str, episode_context: str = "") -> Optional[Dict]:
+        """使用AI分析剧情点 - 使用完整字幕"""
         if not self.ai_config.get('enabled'):
             return None
 
-        # 构建分析prompt
-        subtitle_text = "\n".join([f"[{sub['start']}] {sub['text']}" for sub in subtitles[:300]])
+        # 使用全部字幕文本，不截断
+        subtitle_text = "\n".join([f"[{sub['start']}] {sub['text']}" for sub in subtitles])
+        
+        # 动态生成上下文信息
+        context_info = f"\n【前情提要】{episode_context}" if episode_context else ""
+        
+        # 计算总时长用于参考
+        total_duration = self._time_to_seconds(subtitles[-1]['end']) if subtitles else 0
+        
+        prompt = f"""你是资深电视剧剪辑师，现在要为第{episode_num}集制作精彩短视频片段。
 
-        prompt = f"""你是专业的电视剧剪辑师，请分析第{episode_num}集的精彩片段。
+【完整剧集信息】
+- 集数：第{episode_num}集
+- 总时长：{total_duration//60:.0f}分钟{episode_context}
 
-【字幕内容】
+【完整字幕内容】
 {subtitle_text}
 
-请找出3-5个最适合制作短视频的精彩片段，每个片段2-3分钟。
-优先选择：关键冲突、人物转折、线索揭露、情感爆发、重要对话
+【专业分析要求】
+请深度分析这一集的完整内容，识别出3-4个最具观赏价值的片段：
 
-请按JSON格式输出：
+1. 每个片段必须是完整的戏剧单元（120-200秒）
+2. 时间点必须精确到秒，确保在字幕范围内
+3. 片段类型要多样化，避免重复
+4. 考虑剧情连贯性和情感递进
+5. 每集分析结果应该独特，体现该集特色
+
+【输出要求】
+严格按照以下JSON格式输出，时间格式必须是 HH:MM:SS,mmm：
+
 {{
     "episode_analysis": {{
         "episode_number": "{episode_num}",
-        "genre": "剧情类型",
-        "main_theme": "核心主题"
+        "genre": "具体剧情类型（如法律剧/悬疑剧等）",
+        "main_theme": "第{episode_num}集的核心主题",
+        "unique_features": ["该集独有特点1", "该集独有特点2"],
+        "emotional_arc": "情感发展脉络"
     }},
     "plot_points": [
         {{
-            "plot_type": "剧情点类型",
-            "title": "片段标题",
-            "start_time": "开始时间",
-            "end_time": "结束时间",
-            "duration": 时长秒数,
-            "plot_significance": "剧情意义",
-            "content_summary": "内容摘要",
-            "third_person_narration": "第三人称旁白",
-            "content_highlights": ["亮点1", "亮点2"],
-            "corrected_errors": ["修正的错别字"] #add
+            "plot_type": "剧情点类型（关键冲突/人物转折/线索揭露/情感爆发/重要对话）",
+            "title": "具体片段标题（体现该集特色）",
+            "start_time": "HH:MM:SS,mmm",
+            "end_time": "HH:MM:SS,mmm", 
+            "duration": 具体秒数,
+            "plot_significance": "在整个剧集中的意义",
+            "content_summary": "片段详细内容概述",
+            "key_dialogues": ["核心对话1", "核心对话2"],
+            "third_person_narration": "适合短视频的第三人称解说",
+            "content_highlights": ["观众关注点1", "观众关注点2"],
+            "emotional_peak": "情感高潮描述",
+            "visual_elements": "画面重点元素"
         }}
     ]
-}}"""
+}}
 
-        system_prompt = "你是专业的影视剪辑师，擅长识别电视剧精彩片段。"
+【特别注意】
+- 时间必须在字幕范围内，检查首末字幕时间
+- 每个片段要有明确的开始和结束标志
+- 确保片段具有独立的戏剧价值
+- 第{episode_num}集要有该集独特的分析角度"""
+
+        system_prompt = f"""你是专业的影视剪辑师，具有丰富的电视剧分析经验。你的任务是：
+1. 深度理解剧情发展脉络
+2. 准确识别戏剧高潮点
+3. 确保时间段的准确性
+4. 为每集提供独特的分析视角
+5. 生成适合短视频传播的内容
+
+请确保每次分析都体现该集的独特性，避免千篇一律的结果。"""
 
         response = self.call_ai_api(prompt, system_prompt)
         if response:
@@ -520,17 +558,30 @@ class IntelligentTVClipperSystem:
                     start = response.find("```json") + 7
                     end = response.find("```", start)
                     json_text = response[start:end]
+                elif "```" in response:
+                    start = response.find("```") + 3
+                    end = response.rfind("```")
+                    json_text = response[start:end]
                 else:
                     start = response.find("{")
                     end = response.rfind("}") + 1
                     json_text = response[start:end]
 
                 result = json.loads(json_text)
-                print(f"🤖 AI分析成功: {len(result.get('plot_points', []))} 个片段")
-                return result
+                
+                # 验证时间范围的有效性
+                if self._validate_time_ranges(result.get('plot_points', []), subtitles):
+                    print(f"🤖 AI分析成功: {len(result.get('plot_points', []))} 个片段")
+                    return result
+                else:
+                    print(f"⚠️ AI返回的时间范围无效，使用基础规则分析")
+                    return None
 
+            except json.JSONDecodeError as e:
+                print(f"⚠️ AI响应JSON解析失败: {e}")
+                print(f"原始响应前200字符: {response[:200]}")
             except Exception as e:
-                print(f"⚠️ AI响应解析失败: {e}")
+                print(f"⚠️ AI响应处理失败: {e}")
 
         return None
 
@@ -742,6 +793,73 @@ class IntelligentTVClipperSystem:
 
         return corrected #add
 
+    def _validate_time_ranges(self, plot_points: List[Dict], subtitles: List[Dict]) -> bool:
+        """验证AI返回的时间范围是否有效"""
+        if not plot_points or not subtitles:
+            return False
+            
+        first_subtitle_time = subtitles[0]['start']
+        last_subtitle_time = subtitles[-1]['end']
+        
+        first_seconds = self._time_to_seconds(first_subtitle_time)
+        last_seconds = self._time_to_seconds(last_subtitle_time)
+        
+        for point in plot_points:
+            start_time = point.get('start_time', '')
+            end_time = point.get('end_time', '')
+            
+            if not start_time or not end_time:
+                print(f"⚠️ 缺少时间信息: {point.get('title', '未知片段')}")
+                return False
+                
+            start_seconds = self._time_to_seconds(start_time)
+            end_seconds = self._time_to_seconds(end_time)
+            
+            # 检查时间是否在字幕范围内
+            if start_seconds < first_seconds or end_seconds > last_seconds:
+                print(f"⚠️ 时间超出范围: {start_time}-{end_time} (字幕范围: {first_subtitle_time}-{last_subtitle_time})")
+                return False
+                
+            # 检查时间段是否有效
+            if start_seconds >= end_seconds:
+                print(f"⚠️ 无效时间段: {start_time}-{end_time}")
+                return False
+                
+            # 检查时长是否合理（60-300秒）
+            duration = end_seconds - start_seconds
+            if duration < 60 or duration > 300:
+                print(f"⚠️ 时长不合理: {duration:.1f}秒")
+                return False
+                
+        return True
+
+    def _build_episode_context(self, episode_num: str, subtitles: List[Dict]) -> str:
+        """构建集数上下文信息"""
+        if episode_num in self.episode_contexts:
+            return self.episode_contexts[episode_num]
+            
+        # 分析该集的基本信息
+        all_text = " ".join([sub['text'] for sub in subtitles])
+        
+        # 提取关键角色
+        key_characters = []
+        character_patterns = ['检察官', '律师', '法官', '被告', '证人', '警察']
+        for pattern in character_patterns:
+            if pattern in all_text:
+                key_characters.append(pattern)
+                
+        # 提取关键事件
+        key_events = []
+        event_patterns = ['案件', '审判', '证据', '听证会', '申诉', '调查']
+        for pattern in event_patterns:
+            if pattern in all_text:
+                key_events.append(pattern)
+        
+        context = f"主要角色：{', '.join(key_characters[:3])}；关键事件：{', '.join(key_events[:3])}"
+        self.episode_contexts[episode_num] = context
+        
+        return context
+
     def get_analysis_cache_path(self, srt_file: str) -> str:
         """获取分析结果缓存路径"""
         file_hash = self.get_file_hash(os.path.join(self.srt_folder, srt_file)) # fix
@@ -843,15 +961,23 @@ class IntelligentTVClipperSystem:
                 duration = end_seconds - start_seconds
 
                 if duration <= 0:
-                    print(f"   ❌ 无效时间段")
+                    print(f"   ❌ 无效时间段: 开始{start_seconds:.1f}s >= 结束{end_seconds:.1f}s")
                     return False
+
+                if duration < 30:
+                    print(f"   ❌ 时长过短: {duration:.1f}秒")
+                    return False
+
+                # 添加小量缓冲时间
+                buffer_start = max(0, start_seconds - 1)
+                buffer_duration = duration + 2
 
                 # FFmpeg命令
                 cmd = [
                     'ffmpeg',
                     '-i', video_file,
-                    '-ss', str(start_seconds),
-                    '-t', str(duration),
+                    '-ss', str(buffer_start),
+                    '-t', str(buffer_duration),
                     '-c:v', 'libx264',
                     '-c:a', 'aac',
                     '-preset', 'medium',
@@ -862,29 +988,28 @@ class IntelligentTVClipperSystem:
                     '-y'
                 ]
 
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
 
                 if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1024: #fix
                     file_size = os.path.getsize(output_path) / (1024*1024) #fix
-                    print(f"   ✅ 成功: {file_size:.1f}MB") #fix
+                    print(f"   ✅ 成功: {file_size:.1f}MB (实际时长: {duration:.1f}秒)") #fix
                     return True
                 else:
-                    print(f"   ❌ 失败: {result.stderr[:100] if result.stderr else '未知错误'}")
+                    error_msg = result.stderr[:200] if result.stderr else '未知错误'
+                    print(f"   ❌ 尝试{attempt+1}失败: {error_msg}")
                     # 清理失败的文件 #add
                     if os.path.exists(output_path): #add
                         os.remove(output_path) #add
-                    print(f"   ❌ 尝试{attempt+1}失败: {result.stderr[:100] if result.stderr else '未知错误'}") #add
-                    
 
             except subprocess.TimeoutExpired: #add
-                print(f"   ❌ 尝试{attempt+1}超时") #add
+                print(f"   ❌ 尝试{attempt+1}超时")
                 if os.path.exists(output_path): #add
                     os.remove(output_path) #add
             except Exception as e: #add
-                print(f"   ❌ 异常: {e}")
+                print(f"   ❌ 尝试{attempt+1}异常: {e}")
                 if os.path.exists(output_path): #add
                     os.remove(output_path) #add
-            print(f"   ❌ 尝试{attempt+1}异常: {e}") #add
+
         print(f"   ❌ 所有重试失败") #add
         return False
 
@@ -954,13 +1079,27 @@ class IntelligentTVClipperSystem:
 
             episode_num = self._extract_episode_number(srt_filename)
 
+            # 构建该集的上下文
+            episode_context = self._build_episode_context(episode_num, subtitles)
+            
             # AI分析优先，基础规则兜底
-            ai_analysis = self.analyze_with_ai(subtitles, episode_num)
+            ai_analysis = self.analyze_with_ai(subtitles, episode_num, episode_context)
             if ai_analysis and ai_analysis.get('plot_points'):
                 plot_points = ai_analysis['plot_points']
+                print(f"🎯 AI识别到 {len(plot_points)} 个剧情点:")
+                for i, point in enumerate(plot_points, 1):
+                    plot_type = point.get('plot_type', '未知类型')
+                    title = point.get('title', '无标题')
+                    duration = point.get('duration', 0)
+                    print(f"    {i}. {plot_type}: {title} ({duration:.1f}秒)")
             else:
-                print("📝 使用基础规则分析")
+                print("📝 AI分析失败，使用基础规则分析")
                 plot_points = self.analyze_plot_points_basic(subtitles, episode_num)
+                print(f"🎯 规则识别到 {len(plot_points)} 个剧情点:")
+                for i, point in enumerate(plot_points, 1):
+                    plot_type = point.get('plot_type', '未知类型')
+                    duration = point.get('duration', 0)
+                    print(f"    {i}. {plot_type} (时长: {duration:.1f}秒)")
 
             if not plot_points:
                 print(f"❌ 未找到合适的剧情点")
