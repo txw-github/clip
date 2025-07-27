@@ -560,33 +560,51 @@ class CompleteTVClipper:
 
         return highlights if highlights else ["精彩剧情发展", "角色深度刻画"]
 
-    def generate_next_episode_connection(self, plot_points: List[Dict], episode_num: str) -> str:
-        """生成与下一集的衔接说明"""
+    def generate_next_episode_connection(self, plot_points: List[Dict], episode_num: str, previous_context: str = "") -> str:
+        """生成与下一集的衔接说明（考虑上下文连贯性）"""
         if not plot_points:
             return f"第{episode_num}集剧情发展完整，下一集将继续推进故事主线"
 
         last_segment = plot_points[-1]
         content = last_segment.get('content_summary', '')
         plot_type = last_segment.get('plot_type', '')
-
-        # 基于最后一个片段的内容生成衔接
+        
+        # 分析本集整体剧情走向
+        all_content = ' '.join([point.get('content_summary', '') for point in plot_points])
+        
+        # 基于剧情发展阶段生成更精准的衔接
         if '证据' in content and '发现' in content:
-            return f"第{episode_num}集关键证据浮现，下一集将深入调查这些新发现的线索，案件真相即将大白"
+            if '新证据' in all_content or '关键线索' in all_content:
+                return f"第{episode_num}集关键证据浮现，下一集将深入调查这些新发现的线索，案件真相即将大白"
+            else:
+                return f"第{episode_num}集证据链逐步完善，下一集将在此基础上展开更深入的调查"
 
         elif '冲突' in content or plot_type == '关键冲突':
-            return f"第{episode_num}集矛盾激化，下一集冲突将进一步升级，各方力量的较量更加激烈"
+            if '激化' in all_content or '升级' in all_content:
+                return f"第{episode_num}集矛盾激化，下一集冲突将进一步升级，各方力量的较量更加激烈"
+            else:
+                return f"第{episode_num}集冲突爆发，下一集将处理冲突带来的后续影响和新的挑战"
 
         elif '决定' in content or plot_type == '人物转折':
             return f"第{episode_num}集重要决定已做出，下一集将展现这个选择带来的后果和新的挑战"
 
         elif '真相' in content or plot_type == '线索揭露':
-            return f"第{episode_num}集部分真相揭露，下一集将有更多隐藏的秘密浮出水面，完整真相即将大白"
+            if '部分' in content or '初步' in content:
+                return f"第{episode_num}集部分真相揭露，下一集将有更多隐藏的秘密浮出水面，完整真相即将大白"
+            else:
+                return f"第{episode_num}集重要真相披露，下一集将处理真相带来的震撼和后续发展"
 
         elif plot_type == '情感爆发':
             return f"第{episode_num}集情感达到高潮，下一集将处理这次爆发的后续影响，人物关系面临重大变化"
 
         else:
-            return f"第{episode_num}集重要情节发展，下一集故事将在此基础上继续推进，更多精彩内容值得期待"
+            # 基于剧情类型生成更具体的衔接
+            if self.detected_genre == '法律剧':
+                return f"第{episode_num}集法律程序重要进展，下一集将继续推进案件调查和法庭争议"
+            elif self.detected_genre == '爱情剧':
+                return f"第{episode_num}集情感关系发展，下一集将展现更多感人的情感纠葛"
+            else:
+                return f"第{episode_num}集重要情节发展，下一集故事将在此基础上继续推进，更多精彩内容值得期待"
 
     def time_to_seconds(self, time_str: str) -> float:
         """时间转换为秒"""
@@ -837,9 +855,60 @@ class CompleteTVClipper:
 
         return episode_summary
 
+    def analyze_series_continuity(self, all_episodes: List[Dict]) -> Dict:
+        """分析整个剧集的连贯性和主线发展"""
+        if not all_episodes:
+            return {}
+        
+        # 提取主要剧情线索
+        main_storylines = {}
+        character_development = {}
+        plot_progression = []
+        
+        for episode in all_episodes:
+            episode_num = episode['episode_number']
+            
+            # 分析主要剧情线
+            for plot_point in episode.get('plot_points', []):
+                content = plot_point.get('content_summary', '')
+                
+                # 识别主要剧情线
+                if '案件' in content or '证据' in content:
+                    if '案件线' not in main_storylines:
+                        main_storylines['案件线'] = []
+                    main_storylines['案件线'].append({
+                        'episode': episode_num,
+                        'content': content,
+                        'type': plot_point['plot_type']
+                    })
+                
+                if '情感' in content or '关系' in content:
+                    if '情感线' not in main_storylines:
+                        main_storylines['情感线'] = []
+                    main_storylines['情感线'].append({
+                        'episode': episode_num,
+                        'content': content,
+                        'type': plot_point['plot_type']
+                    })
+            
+            # 记录剧情进展
+            plot_progression.append({
+                'episode': episode_num,
+                'main_theme': episode.get('genre', '未知'),
+                'key_developments': [p['plot_type'] for p in episode.get('plot_points', [])],
+                'connection': episode.get('next_episode_connection', '')
+            })
+        
+        return {
+            'main_storylines': main_storylines,
+            'plot_progression': plot_progression,
+            'total_episodes': len(all_episodes),
+            'genre_consistency': self.detected_genre
+        }
+
     def process_all_episodes(self):
-        """处理所有集数"""
-        print("\n🚀 开始智能剪辑处理")
+        """处理所有集数（增强版 - 考虑上下文连贯性）"""
+        print("\n🚀 开始智能剧情剪辑处理")
         print("=" * 50)
 
         # 获取所有SRT文件
@@ -858,31 +927,213 @@ class CompleteTVClipper:
         # 处理每一集
         all_episodes = []
         total_clips = 0
+        previous_context = ""
 
-        for srt_file in srt_files:
+        for i, srt_file in enumerate(srt_files):
             try:
-                episode_summary = self.process_episode(srt_file)
+                print(f"\n{'='*60}")
+                print(f"📺 处理第 {i+1}/{len(srt_files)} 集: {srt_file}")
+                print(f"{'='*60}")
+                
+                episode_summary = self.process_episode_with_context(srt_file, previous_context)
                 if episode_summary:
                     all_episodes.append(episode_summary)
                     total_clips += episode_summary['created_clips']
+                    
+                    # 更新上下文给下一集使用
+                    previous_context = self.build_context_for_next_episode(episode_summary)
+                    
             except Exception as e:
                 print(f"❌ 处理 {srt_file} 出错: {e}")
 
-        # 生成最终报告
-        self.create_final_report(all_episodes, total_clips)
+        # 分析整体连贯性
+        continuity_analysis = self.analyze_series_continuity(all_episodes)
+
+        # 生成最终报告（包含连贯性分析）
+        self.create_enhanced_final_report(all_episodes, total_clips, continuity_analysis)
 
         print(f"\n📊 处理完成:")
         print(f"✅ 成功处理: {len(all_episodes)}/{len(srt_files)} 集")
         print(f"🎬 生成片段: {total_clips} 个")
         print(f"📁 输出目录: {self.clips_folder}/")
-        print(f"📄 详细报告: {self.reports_folder}/完整剪辑报告.txt")
+        print(f"📄 详细报告: {self.reports_folder}/完整剧辑报告.txt")
+        print(f"🔗 连贯性分析: {continuity_analysis.get('total_episodes', 0)} 集剧情连贯性已分析")
 
-    def create_final_report(self, episodes: List[Dict], total_clips: int):
-        """创建最终报告"""
+    def process_episode_with_context(self, srt_filename: str, previous_context: str = "") -> Optional[Dict]:
+        """处理单集（考虑上下文）"""
+        print(f"\n📺 处理集数: {srt_filename}")
+        if previous_context:
+            print(f"📋 上集衔接: {previous_context[:50]}...")
+
+        # 解析字幕
+        srt_path = os.path.join(self.srt_folder, srt_filename)
+        subtitles = self.parse_srt_file(srt_path)
+
+        if not subtitles:
+            print(f"❌ 字幕解析失败")
+            return None
+
+        episode_num = self.extract_episode_number(srt_filename)
+
+        # 分析剧情点（考虑上下文）
+        plot_points = self.analyze_plot_points_with_context(subtitles, episode_num, previous_context)
+
+        if not plot_points:
+            print(f"❌ 未找到合适的剧情点")
+            return None
+
+        print(f"🎯 识别到 {len(plot_points)} 个剧情点:")
+        for i, point in enumerate(plot_points, 1):
+            print(f"    {i}. {point['plot_type']} (评分: {point['score']:.1f}, 时长: {point['duration']:.1f}秒)")
+
+        # 查找视频文件
+        video_file = self.find_video_file(srt_filename)
+        if not video_file:
+            print(f"❌ 未找到视频文件")
+            return None
+
+        print(f"📁 视频文件: {os.path.basename(video_file)}")
+
+        # 创建视频片段
+        created_clips = self.create_video_clips(plot_points, video_file, srt_filename)
+
+        # 生成下集衔接说明（考虑上下文）
+        next_episode_connection = self.generate_next_episode_connection(plot_points, episode_num, previous_context)
+
+        episode_summary = {
+            'episode_number': episode_num,
+            'filename': srt_filename,
+            'genre': self.detected_genre,
+            'genre_confidence': self.genre_confidence,
+            'plot_points': plot_points,
+            'created_clips': len(created_clips),
+            'total_duration': sum(point['duration'] for point in plot_points),
+            'next_episode_connection': next_episode_connection,
+            'previous_context': previous_context
+        }
+
+        print(f"✅ {srt_filename} 处理完成: {len(created_clips)} 个片段")
+
+        return episode_summary
+
+    def analyze_plot_points_with_context(self, subtitles: List[Dict], episode_num: str, previous_context: str = "") -> List[Dict]:
+        """分析剧情点（考虑上下文连贯性）"""
+        if not subtitles:
+            return []
+
+        # 检测剧情类型
+        if self.detected_genre is None:
+            self.detect_genre(subtitles)
+
+        plot_points = []
+        window_size = 20  # 分析窗口大小
+
+        # 滑动窗口分析
+        for i in range(0, len(subtitles) - window_size, 10):
+            window_subtitles = subtitles[i:i + window_size]
+            combined_text = ' '.join([sub['text'] for sub in window_subtitles])
+
+            # 计算各类剧情点得分
+            plot_scores = {}
+            for plot_type, config in self.plot_point_types.items():
+                score = 0
+
+                # 关键词匹配
+                for keyword in config['keywords']:
+                    score += combined_text.count(keyword) * config['weight']
+
+                # 剧情类型加权
+                if self.detected_genre in self.genre_patterns:
+                    genre_keywords = self.genre_patterns[self.detected_genre]['keywords']
+                    for keyword in genre_keywords:
+                        if keyword in combined_text:
+                            score += 5
+
+                # 上下文连贯性加权
+                if previous_context:
+                    # 如果当前内容与上下文相关，增加权重
+                    context_keywords = previous_context.split()[:10]  # 取前10个关键词
+                    for keyword in context_keywords:
+                        if len(keyword) > 2 and keyword in combined_text:
+                            score += 3
+
+                # 标点符号强度
+                score += combined_text.count('！') * 2
+                score += combined_text.count('？') * 1.5
+                score += combined_text.count('...') * 1
+
+                plot_scores[plot_type] = score
+
+            # 找到最高分的剧情点类型
+            best_plot_type = max(plot_scores, key=plot_scores.get)
+            best_score = plot_scores[best_plot_type]
+
+            if best_score >= 12:  # 动态阈值
+                plot_points.append({
+                    'start_index': i,
+                    'end_index': i + window_size - 1,
+                    'plot_type': best_plot_type,
+                    'score': best_score,
+                    'content': combined_text,
+                    'position_ratio': i / len(subtitles),
+                    'context_relevance': self._calculate_context_relevance(combined_text, previous_context)
+                })
+
+        # 去重和优化
+        plot_points = self._deduplicate_plot_points(plot_points)
+
+        # 选择最佳剧情点（每集2-4个）
+        plot_points.sort(key=lambda x: x['score'], reverse=True)
+        selected_points = plot_points[:4]
+
+        # 按时间顺序排序
+        selected_points.sort(key=lambda x: x['start_index'])
+
+        # 优化剧情点片段
+        optimized_points = []
+        for point in selected_points:
+            optimized_point = self._optimize_plot_point(subtitles, point, episode_num)
+            if optimized_point:
+                optimized_points.append(optimized_point)
+
+        return optimized_points
+
+    def _calculate_context_relevance(self, current_content: str, previous_context: str) -> float:
+        """计算与上下文的相关性"""
+        if not previous_context:
+            return 0.0
+        
+        context_words = set(previous_context.split())
+        current_words = set(current_content.split())
+        
+        # 计算词汇重叠度
+        intersection = context_words.intersection(current_words)
+        if not context_words:
+            return 0.0
+        
+        relevance = len(intersection) / len(context_words)
+        return min(relevance * 10, 5.0)  # 最多加5分
+
+    def build_context_for_next_episode(self, episode_summary: Dict) -> str:
+        """为下一集构建上下文信息"""
+        context_parts = []
+        
+        # 添加主要剧情点
+        for plot_point in episode_summary.get('plot_points', []):
+            context_parts.append(f"{plot_point['plot_type']}: {plot_point.get('content_summary', '')}")
+        
+        # 添加衔接信息
+        if episode_summary.get('next_episode_connection'):
+            context_parts.append(f"衔接点: {episode_summary['next_episode_connection']}")
+        
+        return " | ".join(context_parts)</old_str>
+
+    def create_enhanced_final_report(self, episodes: List[Dict], total_clips: int, continuity_analysis: Dict):
+        """创建增强版最终报告（包含连贯性分析）"""
         if not episodes:
             return
 
-        report_path = os.path.join(self.reports_folder, "完整剪辑报告.txt")
+        report_path = os.path.join(self.reports_folder, "完整剪辑报告.txt")</old_str>
 
         content = f"""📺 完整智能电视剧剪辑系统报告
 {"=" * 100}

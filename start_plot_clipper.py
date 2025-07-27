@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-完整智能电视剧剪辑系统启动脚本
+智能电视剧剪辑系统启动脚本 - 集成用户引导
 """
 
 import os
@@ -53,33 +53,31 @@ def check_files():
     return len(srt_files) > 0 and len(video_files) > 0
 
 def main():
-    """主函数"""
-    print("🚀 完整智能电视剧剪辑系统启动")
+    """主启动函数"""
+    print("🎬 智能电视剧剪辑系统")
     print("=" * 60)
 
-    # 设置目录
-    setup_directories()
+    # 检查是否需要用户引导
+    if not os.path.exists("user_config.json"):
+        print("🎯 首次使用，启动配置引导...")
+        try:
+            from user_guide import UserGuideSystem
+            guide = UserGuideSystem()
+            if not guide.run_complete_guide():
+                return
+        except ImportError:
+            print("❌ 引导系统文件缺失，直接启动主系统")
+    else:
+        print("✅ 检测到配置文件，直接启动...")
 
-    # 检查文件
-    if not check_files():
-        print("\n❌ 请先准备好字幕文件和视频文件")
-        print("\n📋 文件准备指南:")
-        print("1. 将字幕文件(.srt/.txt)放入 srt/ 目录")
-        print("2. 将视频文件(.mp4/.mkv等)放入 videos/ 目录")
-        print("3. 确保文件名对应（如 E01.srt 对应 E01.mp4）")
-        return
-
-    print("\n🎬 启动完整剪辑系统...")
-
-    # 导入并运行主程序
+    # 启动主系统
     try:
         from clean_main import main as clipper_main
         clipper_main()
     except ImportError:
-        print("❌ 找不到 clean_main.py")
-        print("请确保 clean_main.py 文件存在")
+        print("❌ 主系统文件缺失，请检查 clean_main.py")
     except Exception as e:
-        print(f"❌ 运行出错: {e}")
+        print(f"❌ 系统运行出错: {e}")
 
 if __name__ == "__main__":
     main()
