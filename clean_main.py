@@ -25,11 +25,10 @@ class CompleteTVClipper:
         self.clips_folder = "clips"
         self.cache_folder = "cache"
         self.reports_folder = "reports"
-        self.series_context_folder = "series_context" # Add series_context folder
 
         # 创建必要目录
         for folder in [self.srt_folder, self.videos_folder, self.clips_folder, 
-                      self.cache_folder, self.reports_folder, self.series_context_folder]:
+                      self.cache_folder, self.reports_folder]:
             os.makedirs(folder, exist_ok=True)
 
         # 剧情点分类定义
@@ -93,200 +92,10 @@ class CompleteTVClipper:
         self.detected_genre = None
         self.genre_confidence = 0.0
 
-        # 剧情连贯性缓存 - 增强版
-        self.series_context = {
-            'previous_episodes': [],
-            'main_storylines': {},
-            'character_arcs': {},
-            'ongoing_conflicts': [],
-            'story_threads': {},
-            'emotional_arcs': {},
-            'plot_connections': [],
-            'narrative_momentum': ""
-        }
-
-        # 加载历史上下文
-        self._load_series_context()
-
         print("🚀 完整智能电视剧剪辑系统已启动")
         print(f"📁 字幕目录: {self.srt_folder}/")
         print(f"🎬 视频目录: {self.videos_folder}/")
         print(f"📤 输出目录: {self.clips_folder}/")
-        print(f"📂 剧集上下文目录: {self.series_context_folder}/")
-
-    def _load_series_context(self):
-        """加载剧集上下文"""
-        context_file = os.path.join(self.series_context_folder, "series_context.json")
-        if os.path.exists(context_file):
-            try:
-                with open(context_file, 'r', encoding='utf-8') as f:
-                    self.series_context = json.load(f)
-                print(f"📚 成功加载剧集上下文")
-            except Exception as e:
-                print(f"⚠️ 加载剧集上下文失败: {e}")
-
-    def _save_series_context(self):
-        """保存剧集上下文"""
-        context_file = os.path.join(self.series_context_folder, "series_context.json")
-        try:
-            with open(context_file, 'w', encoding='utf-8') as f:
-                json.dump(self.series_context, f, ensure_ascii=False, indent=4)
-            print(f"💾 成功保存剧集上下文")
-        except Exception as e:
-            print(f"⚠️ 保存剧集上下文失败: {e}")
-
-    def _update_series_context_with_analysis(self, episode_num: str, analysis_result: Dict):
-        """使用AI分析结果更新剧集上下文"""
-        try:
-            episode_data = analysis_result.get('episode_analysis', {})
-            continuity_data = analysis_result.get('series_continuity', {})
-
-            # 更新主要故事线
-            self.series_context['main_storylines'][episode_num] = episode_data.get('main_storyline', "未知")
-
-            # 更新角色弧线
-            self.series_context['character_arcs'][episode_num] = episode_data.get('character_development', "未知")
-
-            # 更新冲突
-            self.series_context['ongoing_conflicts'].append(episode_data.get('plot_significance', "未知"))
-
-            # 更新故事线索
-            self.series_context['story_threads'][episode_num] = episode_data.get('storyline_progression', "未知")
-
-            # 更新情感弧线
-            self.series_context['emotional_arcs'][episode_num] = episode_data.get('emotional_arc', "未知")
-
-            # 更新情节连接
-            self.series_context['plot_connections'].append(episode_data.get('context_connection', "未知"))
-
-            # 更新叙事动量
-            self.series_context['narrative_momentum'] = continuity_data.get('story_momentum', "未知")
-
-            # 保存上下文
-            self._save_series_context()
-
-        except Exception as e:
-            print(f"⚠️ 更新剧集上下文失败: {e}")
-
-    def _build_rich_context_for_ai(self, episode_num: str, full_text: str) -> str:
-        """构建用于AI分析的丰富上下文信息"""
-        context = f"""
-【剧集整体背景】
-    主要故事线：{self.series_context['main_storylines'].get(episode_num, '未知')}
-    角色发展：{self.series_context['character_arcs'].get(episode_num, '未知')}
-    持续冲突：{self.series_context['ongoing_conflicts']}
-    叙事动量：{self.series_context['narrative_momentum']}
-
-【上一集关键信息】
-"""
-        if self.series_context['previous_episodes']:
-            last_episode = self.series_context['previous_episodes'][-1]
-            context += f"""
-    上一集编号：{last_episode.get('episode_number', '未知')}
-    主要情节：{last_episode.get('main_storyline', '未知')}
-    关键转折：{last_episode.get('plot_significance', '未知')}
-"""
-        else:
-            context += "    本剧为第一集，无上一集信息。\n"
-
-        context += f"""
-【本剧主要人物关系】
-    (请根据剧情自行分析各主要人物之间的关系，例如：恋人、朋友、敌人、合作者等)
-
-【已知重要线索】
-    (请根据剧情自行分析当前已知的重要线索，例如：关键证据、隐藏的秘密、未解的谜团等)
-
-【观众情感预期】
-    (请根据剧情自行分析观众对本集的情感预期，例如：希望看到爱情的进展、期待冲突的解决、渴望真相的揭露等)
-
-        """
-
-        return context
-
-    def _build_ai_analysis_prompt(self, subtitles: List[Dict], episode_num: str) -> str:
-        """构建AI分析提示词 - 包含丰富上下文"""
-        # 构建完整的剧情文本
-        full_text = self._build_complete_script(subtitles)
-
-        # 构建丰富的上下文信息
-        rich_context = self._build_rich_context_for_ai(episode_num, full_text)
-
-        prompt = f"""你是世界顶级的电视剧剧情分析专家。请基于完整的剧集上下文，深度分析第{episode_num}集的内容，找出最适合制作2-3分钟短视频的核心片段，并确保与整体故事线的完美衔接。
-
-{rich_context}
-
-【第{episode_num}集完整剧情内容】
-{full_text}
-
-分析要求：
-1. 充分考虑上一集的结尾衔接点，确保剧情连续性
-2. 识别本集在整体故事发展中的位置和作用
-3. 分析角色发展轨迹的延续和转折
-4. 把握主线剧情的推进节奏和重要转折
-5. 考虑情感弧线的自然发展
-6. 为下一集的发展预留合理的悬念和期待
-
-请按以下JSON格式返回深度分析结果：
-```json
-{{
-    "episode_analysis": {{
-        "episode_number": "{episode_num}",
-        "main_storyline": "本集主要剧情线描述",
-        "plot_significance": "在整体故事中的重要性",
-        "character_development": "主要角色发展变化",
-        "emotional_arc": "情感发展轨迹",
-        "context_connection": "与上一集的具体连接方式",
-        "storyline_progression": "故事线索的具体推进情况"
-    }},
-    "recommended_clips": [
-        {{
-            "clip_id": "片段1",
-            "start_time": "00:01:30",
-            "end_time": "00:04:00",
-            "plot_type": "关键冲突",
-            "reason": "该片段是本集的核心冲突点，能够抓住观众的眼球",
-            "transition_suggestion": "使用快速剪辑和音效来增强紧张感"
-        }},
-        {{
-            "clip_id": "片段2",
-            "start_time": "00:12:45",
-            "end_time": "00:15:15",
-            "plot_type": "人物转折",
-            "reason": "该片段展现了主角的内心挣扎和重要决定，能够引发观众的共鸣",
-            "transition_suggestion": "使用舒缓的音乐和淡入淡出效果来营造情感氛围"
-        }}
-    ],
-    "series_continuity": {{
-        "previous_connection": "与前集的连接说明",
-        "next_episode_setup": "为下集设置的悬念或铺垫",
-        "ongoing_storylines": ["持续的故事线1", "持续的故事线2"],
-        "character_arcs": "角色发展弧线分析",
-        "story_momentum": "叙事动量和节奏变化",
-        "emotional_continuity": "情感连续性分析",
-        "plot_thread_status": {{
-            "resolved_conflicts": ["本集解决的冲突"],
-            "new_conflicts": ["本集引入的新冲突"],
-            "ongoing_mysteries": ["持续的悬疑点"]
-        }}
-    }},
-    "contextual_analysis": {{
-        "narrative_position": "本集在整体叙事结构中的位置",
-        "thematic_development": "主题发展的延续性",
-        "character_relationship_dynamics": "角色关系的变化动态",
-        "foreshadowing_elements": "为后续剧情埋下的伏笔",
-        "callback_references": "对前面剧情的回应和呼应"
-    }},
-    "production_insights": {{
-        "clip_transition_strategy": "与前后集片段的衔接策略",
-        "narrative_coherence": "保持叙事连贯性的关键点",
-        "audience_engagement": "基于上下文的观众参与度分析",
-        "storytelling_techniques": "本集使用的叙事技巧分析"
-    }}
-}}
-```
-请严格按照JSON格式返回结果，不要包含任何多余的文字说明。
-"""
-        return prompt
 
     def parse_srt_file(self, filepath: str) -> List[Dict]:
         """解析SRT字幕文件并修正错别字"""
@@ -1052,30 +861,10 @@ class CompleteTVClipper:
 
         for srt_file in srt_files:
             try:
-                episode_num = self.extract_episode_number(srt_file)
-
-                # AI分析剧情 - 包含上下文
-                srt_path = os.path.join(self.srt_folder, srt_file)
-                subtitles = self.parse_srt_file(srt_path)
-                analysis_result = self._ai_analyze_episode(subtitles, episode_num)
-
-                if not analysis_result:
-                    print(f"  ❌ AI分析失败")
-                    continue
-
-                # 更新剧集上下文
-                self._update_series_context_with_analysis(episode_num, analysis_result)
-
                 episode_summary = self.process_episode(srt_file)
                 if episode_summary:
                     all_episodes.append(episode_summary)
                     total_clips += episode_summary['created_clips']
-
-                # 保存上一集信息
-                episode_summary['main_storyline'] = analysis_result['episode_analysis']['main_storyline']
-                episode_summary['plot_significance'] = analysis_result['episode_analysis']['plot_significance']
-                self.series_context['previous_episodes'].append(episode_summary)
-
             except Exception as e:
                 print(f"❌ 处理 {srt_file} 出错: {e}")
 
@@ -1191,85 +980,6 @@ class CompleteTVClipper:
             print(f"📄 最终报告已保存")
         except Exception as e:
             print(f"⚠️ 报告保存失败: {e}")
-
-    def _ai_analyze_episode(self, subtitles: List[Dict], episode_num: str) -> Optional[Dict]:
-        """使用AI分析剧集内容"""
-        try:
-            # 构建提示词
-            prompt = self._build_ai_analysis_prompt(subtitles, episode_num)
-
-            # 调用AI API (这里需要替换成你实际的API调用代码)
-            # response = call_ai_api(prompt)  
-            # analysis_result = json.loads(response)
-
-            # 为了示例，我们使用一个模拟的分析结果
-            analysis_result = {
-                "episode_analysis": {
-                    "episode_number": episode_num,
-                    "main_storyline": "本集主要讲述了主角发现了新的线索，并与反派展开了激烈的冲突。",
-                    "plot_significance": "本集是剧情发展的重要转折点，为后续的剧情埋下了伏笔。",
-                    "character_development": "主角在本集中经历了内心的挣扎，最终做出了重要的决定。",
-                    "emotional_arc": "本集的情感发展跌宕起伏，从希望到失望，再到最后的坚定。",
-                    "context_connection": "本集与上一集的情节紧密相连，延续了上一集的悬念。",
-                    "storyline_progression": "本集的故事线索得到了明显的推进，为后续的剧情发展奠定了基础。"
-                },
-                "recommended_clips": [
-                    {
-                        "clip_id": "片段1",
-                        "start_time": "00:01:30",
-                        "end_time": "00:04:00",
-                        "plot_type": "关键冲突",
-                        "reason": "该片段是本集的核心冲突点，能够抓住观众的眼球",
-                        "transition_suggestion": "使用快速剪辑和音效来增强紧张感"
-                    },
-                    {
-                        "clip_id": "片段2",
-                        "start_time": "00:12:45",
-                        "end_time": "00:15:15",
-                        "plot_type": "人物转折",
-                        "reason": "该片段展现了主角的内心挣扎和重要决定，能够引发观众的共鸣",
-                        "transition_suggestion": "使用舒缓的音乐和淡入淡出效果来营造情感氛围"
-                    }
-                ],
-                "series_continuity": {
-                    "previous_connection": "本集延续了上一集主角与反派的冲突，并在新的情境下展开。",
-                    "next_episode_setup": "本集结尾为下一集埋下了悬念，主角将面临新的挑战。",
-                    "ongoing_storylines": ["主角与反派的斗争", "主角的个人成长"],
-                    "character_arcs": "主角在本集中经历了重要的转变，为后续的成长奠定了基础。",
-                    "story_momentum": "本集的叙事节奏紧凑，情节发展迅速。",
-                    "emotional_continuity": "本集的情感线索延续了上一集的情感基调。",
-                    "plot_thread_status": {
-                        "resolved_conflicts": ["主角与反派的小规模冲突"],
-                        "new_conflicts": ["主角面临新的挑战"],
-                        "ongoing_mysteries": ["隐藏的秘密"]
-                    }
-                },
-                "contextual_analysis": {
-                    "narrative_position": "本集是剧情发展的重要转折点。",
-                    "thematic_development": "本集延续了上一集的主题，并加入了新的元素。",
-                    "character_relationship_dynamics": "本集角色关系发生了微妙的变化。",
-                    "foreshadowing_elements": "本集为后续剧情埋下了伏笔。",
-                    "callback_references": "本集对前面剧情进行了回应和呼应。"
-                },
-                "production_insights": {
-                    "clip_transition_strategy": "使用流畅的转场效果，确保剧情连贯性。",
-                    "narrative_coherence": "通过关键情节和人物关系来保持叙事连贯性。",
-                    "audience_engagement": "通过悬念和情感共鸣来吸引观众。",
-                    "storytelling_techniques": "本集使用了多种叙事技巧，如伏笔、悬念和情感渲染。"
-                }
-            }
-
-            print(f"   💡 AI分析完成")
-            return analysis_result
-
-        except Exception as e:
-            print(f"   ❌ AI分析出错: {e}")
-            return None
-
-    def _build_complete_script(self, subtitles: List[Dict]) -> str:
-        """构建完整的剧本"""
-        script_text = "\n".join([f"{sub['start']} - {sub['text']}" for sub in subtitles])
-        return script_text
 
 def main():
     """主函数"""
