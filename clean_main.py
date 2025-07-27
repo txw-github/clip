@@ -3,24 +3,16 @@
 # -*- coding: utf-8 -*-
 
 """
-完整智能电视剧剪辑系统 - 终极版
-功能特点：
-1. 支持不同剧情类型的电视剧自动识别
-2. 按剧情点分剪短视频（关键冲突、人物转折、线索揭露等）
-3. 支持非连续时间段的智能合并剪辑
-4. 自动生成第三人称旁白字幕
-5. 跨集连贯性分析和衔接说明
-6. 智能错别字修正和完整句子保证
-7. 稳定的缓存机制和一致性保证
-8. 处理所有SRT文件的批量模式
+完整智能电视剧剪辑系统 - 集成版
+解决所有15个核心问题的完整方案
 """
 
 import os
 import re
 import json
-import hashlib
 import subprocess
-import sys
+import hashlib
+import requests
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 import time
@@ -2041,7 +2033,7 @@ class CompleteIntelligentTVClipper:
         print("""
 🎯 系统特点:
 • 支持各种电视剧类型（法律剧、爱情剧、悬疑剧等）
-• 智能识别剧情点（冲突、转折、揭露、情感爧发等）
+• 智能识别剧情点（冲突、转折、揭露、情感爆发等）
 • 支持非连续时间段的合并剪辑
 • 自动生成第三人称旁白字幕
 • 跨集连贯性保证和衔接点分析
