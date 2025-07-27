@@ -1,16 +1,18 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
-完整智能电视剧剪辑系统 - 重构版
+完整智能电视剧剪辑系统 - 终极版
 功能特点：
-1. 清晰的AI配置系统（官方API vs 中转API）
-2. 智能剧情点识别和剪辑
-3. 按SRT文件名排序处理
-4. 第三人称旁白生成
-5. 完整句子边界保证
-6. 错别字自动修正
-7. 分析结果缓存
+1. 支持不同剧情类型的电视剧自动识别
+2. 按剧情点分剪短视频（关键冲突、人物转折、线索揭露等）
+3. 支持非连续时间段的智能合并剪辑
+4. 自动生成第三人称旁白字幕
+5. 跨集连贯性分析和衔接说明
+6. 智能错别字修正和完整句子保证
+7. 稳定的缓存机制和一致性保证
+8. 处理所有SRT文件的批量模式
 """
 
 import os
@@ -19,11 +21,12 @@ import json
 import hashlib
 import subprocess
 import sys
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from datetime import datetime
+import time
 
-class IntelligentTVClipperSystem:
-    """智能电视剧剪辑系统"""
+class CompleteIntelligentTVClipper:
+    """完整智能电视剧剪辑系统"""
 
     def __init__(self):
         # 目录结构
@@ -33,74 +36,82 @@ class IntelligentTVClipperSystem:
         self.cache_folder = "cache"
         self.reports_folder = "reports"
         self.analysis_cache_folder = "analysis_cache"
-        self.clip_status_folder = "clip_status" #add
+        self.clip_status_folder = "clip_status"
 
         # 创建必要目录
         for folder in [self.srt_folder, self.videos_folder, self.clips_folder, 
-                      self.cache_folder, self.reports_folder, self.analysis_cache_folder, self.clip_status_folder]: #add clip_status
+                      self.cache_folder, self.reports_folder, self.analysis_cache_folder, self.clip_status_folder]:
             os.makedirs(folder, exist_ok=True)
 
         # 剧情点分类配置
         self.plot_point_types = {
             '关键冲突': {
-                'keywords': ['冲突', '争执', '对抗', '质疑', '反驳', '争议', '激烈', '愤怒', '不同意', '矛盾', '争论', '辩论'],
+                'keywords': ['冲突', '争执', '对抗', '质疑', '反驳', '争议', '激烈', '愤怒', '不同意', '矛盾', '争论', '辩论', '反对', '抗议'],
                 'weight': 10,
-                'ideal_duration': 180
+                'ideal_duration': 180,
+                'min_score': 15
             },
             '人物转折': {
-                'keywords': ['决定', '改变', '选择', '转变', '觉悟', '明白', '意识到', '发现自己', '成长', '突破', '蜕变'],
+                'keywords': ['决定', '改变', '选择', '转变', '觉悟', '明白', '意识到', '发现自己', '成长', '突破', '蜕变', '醒悟', '领悟'],
                 'weight': 9,
-                'ideal_duration': 150
+                'ideal_duration': 150,
+                'min_score': 12
             },
             '线索揭露': {
-                'keywords': ['发现', '揭露', '真相', '证据', '线索', '秘密', '暴露', '证明', '找到', '曝光', '披露'],
+                'keywords': ['发现', '揭露', '真相', '证据', '线索', '秘密', '暴露', '证明', '找到', '曝光', '披露', '揭示', '显露'],
                 'weight': 8,
-                'ideal_duration': 160
+                'ideal_duration': 160,
+                'min_score': 10
             },
             '情感爆发': {
-                'keywords': ['哭', '痛苦', '绝望', '愤怒', '激动', '崩溃', '心痛', '感动', '震撼', '泪水', '悲伤'],
+                'keywords': ['哭', '痛苦', '绝望', '愤怒', '激动', '崩溃', '心痛', '感动', '震撼', '泪水', '悲伤', '眼泪', '哽咽'],
                 'weight': 7,
-                'ideal_duration': 140
+                'ideal_duration': 140,
+                'min_score': 8
             },
             '重要对话': {
-                'keywords': ['告诉', '承认', '坦白', '解释', '澄清', '说明', '表态', '保证', '承诺', '宣布'],
+                'keywords': ['告诉', '承认', '坦白', '解释', '澄清', '说明', '表态', '保证', '承诺', '宣布', '声明', '交代'],
                 'weight': 6,
-                'ideal_duration': 170
+                'ideal_duration': 170,
+                'min_score': 6
+            },
+            '主题升华': {
+                'keywords': ['正义', '真理', '信念', '坚持', '希望', '信任', '责任', '使命', '价值', '意义', '精神', '理想'],
+                'weight': 8,
+                'ideal_duration': 160,
+                'min_score': 8
             }
         }
 
-        # 错别字修正库
+        # 错别字修正库（扩展版）
         self.corrections = {
             '防衛': '防卫', '正當': '正当', '証據': '证据', '檢察官': '检察官',
             '審判': '审判', '辯護': '辩护', '起訴': '起诉', '調查': '调查',
             '發現': '发现', '決定': '决定', '選擇': '选择', '聽證會': '听证会',
             '問題': '问题', '機會': '机会', '開始': '开始', '結束': '结束',
-            '証人': '证人', '証言': '证言', '実現': '实现', '対話': '对话'
+            '証人': '证人', '証言': '证言', '実現': '实现', '対話': '对话',
+            '関係': '关系', '実际': '实际', '対于': '对于', '変化': '变化',
+            '無罪': '无罪', '有罪': '有罪', '検察': '检察', '弁護': '辩护'
         }
 
-        # 全剧上下文缓存
-        self.series_context = { #add series_context
+        # 全剧上下文管理
+        self.series_context = {
             'previous_episodes': [],
             'main_storylines': [],
             'character_arcs': {},
-            'ongoing_conflicts': []
+            'ongoing_conflicts': [],
+            'genre_detected': None,
+            'main_themes': []
         }
-        
-        # 每集分析上下文
-        self.episode_contexts = {}
-
-        # 检测到的剧情类型
-        self.detected_genre = None #add detected_genre
-        self.genre_confidence = 0.0 #add genre_confidence
 
         # 加载AI配置
         self.ai_config = self._load_ai_config()
 
-        print("🚀 智能电视剧剪辑系统已启动")
+        print("🚀 完整智能电视剧剪辑系统已启动")
         print(f"📁 字幕目录: {self.srt_folder}/")
         print(f"🎬 视频目录: {self.videos_folder}/")
         print(f"📤 输出目录: {self.clips_folder}/")
-        print(f"💾 缓存目录: {self.cache_folder}/") #add cache
+        print(f"💾 缓存系统: 启用")
 
     def _load_ai_config(self) -> Dict:
         """加载AI配置"""
@@ -214,7 +225,6 @@ class IntelligentTVClipperSystem:
         try:
             if config['provider'] == 'gemini':
                 from google import genai
-
                 client = genai.Client(api_key=config['api_key'])
                 response = client.models.generate_content(
                     model=config['model'],
@@ -232,18 +242,15 @@ class IntelligentTVClipperSystem:
         """测试中转API连接"""
         try:
             from openai import OpenAI
-
             client = OpenAI(
                 api_key=config['api_key'],
                 base_url=config['base_url']
             )
-
             completion = client.chat.completions.create(
                 model=config['model'],
                 messages=[{'role': 'user', 'content': '测试连接'}],
                 max_tokens=10
             )
-
             return bool(completion.choices[0].message.content)
         except Exception as e:
             print(f"❌ 测试失败: {e}")
@@ -256,7 +263,7 @@ class IntelligentTVClipperSystem:
 
         if not self.ai_config.get('enabled'):
             print("❌ 未找到AI配置")
-            print("💡 请先配置AI接口") #add
+            print("💡 请先配置AI接口")
             input("\n按回车键返回...")
             return
 
@@ -267,7 +274,7 @@ class IntelligentTVClipperSystem:
         if self.ai_config.get('base_url'):
             print(f"   地址: {self.ai_config['base_url']}")
         print(f"   密钥: {self.ai_config.get('api_key', '')[:10]}...")
-        print() #add
+        print()
 
         # 执行测试
         api_type = self.ai_config.get('api_type')
@@ -277,14 +284,14 @@ class IntelligentTVClipperSystem:
             success = self._test_proxy_api(self.ai_config)
 
         if success:
-            print("\n✅ 连接测试成功！AI接口工作正常") #add
+            print("\n✅ 连接测试成功！AI接口工作正常")
         else:
             print("\n❌ 连接测试失败")
-            print("🔧 建议解决方案:") #add
-            print("1. 检查网络连接") #add
-            print("2. 验证API密钥") #add
-            print("3. 确认服务商状态") #add
-            print("4. 重新配置API") #add
+            print("🔧 建议解决方案:")
+            print("1. 检查网络连接")
+            print("2. 验证API密钥")
+            print("3. 确认服务商状态")
+            print("4. 重新配置API")
 
         input("\n按回车键返回...")
 
@@ -310,16 +317,12 @@ class IntelligentTVClipperSystem:
         try:
             if self.ai_config['provider'] == 'gemini':
                 from google import genai
-
                 client = genai.Client(api_key=self.ai_config['api_key'])
-
                 full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-
                 response = client.models.generate_content(
                     model=self.ai_config['model'],
                     contents=full_prompt
                 )
-
                 return response.text
         except Exception as e:
             print(f"⚠️ 官方API调用失败: {e}")
@@ -329,12 +332,10 @@ class IntelligentTVClipperSystem:
         """调用中转API"""
         try:
             from openai import OpenAI
-
             client = OpenAI(
                 api_key=self.ai_config['api_key'],
                 base_url=self.ai_config['base_url']
             )
-
             messages = []
             if system_prompt:
                 messages.append({'role': 'system', 'content': system_prompt})
@@ -343,43 +344,50 @@ class IntelligentTVClipperSystem:
             completion = client.chat.completions.create(
                 model=self.ai_config['model'],
                 messages=messages,
-                max_tokens=2000,
+                max_tokens=3000,
                 temperature=0.7
             )
-
             return completion.choices[0].message.content
         except Exception as e:
             print(f"⚠️ 中转API调用失败: {e}")
             return None
 
-    def get_file_hash(self, filepath: str) -> str: #add
-        """获取文件内容的MD5哈希值""" #add
-        try: #add
-            with open(filepath, 'rb') as f: #add
-                content = f.read() #add
-                return hashlib.md5(content).hexdigest()[:16] #add
-        except: #add
-            return hashlib.md5(filepath.encode()).hexdigest()[:16] #add
+    def get_file_hash(self, filepath: str) -> str:
+        """获取文件内容的MD5哈希值"""
+        try:
+            with open(filepath, 'rb') as f:
+                content = f.read()
+                return hashlib.md5(content).hexdigest()[:16]
+        except:
+            return hashlib.md5(filepath.encode()).hexdigest()[:16]
 
     def _extract_episode_number(self, filename: str) -> str:
         """从SRT文件名提取集数"""
-        # 直接使用文件名（去掉扩展名）作为集数标识
+        # 支持多种集数格式
+        patterns = [
+            r'[Ee](\d+)',           # E01, e01
+            r'EP(\d+)',             # EP01
+            r'第(\d+)集',           # 第1集
+            r'S\d+E(\d+)',          # S01E01
+            r'(\d+)',               # 纯数字
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, filename, re.I)
+            if match:
+                return match.group(1).zfill(2)
+        
+        # 如果没有找到数字，使用文件名
         base_name = os.path.splitext(filename)[0]
-
-        # 尝试提取数字作为集数
-        match = re.search(r'(\d+)', base_name)
-        if match:
-            return match.group(1).zfill(2)
-
         return base_name
 
     def parse_srt_file(self, filepath: str) -> List[Dict]:
-        """解析SRT字幕文件"""
+        """解析SRT字幕文件，支持多种编码和格式"""
         print(f"📖 解析字幕: {os.path.basename(filepath)}")
 
         # 尝试多种编码读取文件
         content = None
-        for encoding in ['utf-8', 'gbk', 'utf-16', 'gb2312']:
+        for encoding in ['utf-8', 'gbk', 'utf-16', 'gb2312', 'big5']:
             try:
                 with open(filepath, 'r', encoding=encoding, errors='ignore') as f:
                     content = f.read()
@@ -392,213 +400,511 @@ class IntelligentTVClipperSystem:
             return []
 
         # 错别字修正
+        original_content = content
         for old, new in self.corrections.items():
             content = content.replace(old, new)
+        
+        # 记录修正的错别字
+        corrected_errors = []
+        for old, new in self.corrections.items():
+            if old in original_content:
+                corrected_errors.append(f"'{old}' → '{new}'")
 
         # 解析字幕条目
         subtitles = []
-        blocks = re.split(r'\n\s*\n', content.strip())
+        
+        # 支持SRT和其他格式
+        if '-->' in content:
+            # 标准SRT格式
+            blocks = re.split(r'\n\s*\n', content.strip())
+            
+            for block in blocks:
+                lines = block.strip().split('\n')
+                if len(lines) >= 3:
+                    try:
+                        index = int(lines[0]) if lines[0].isdigit() else len(subtitles) + 1
+                        
+                        # 匹配时间格式
+                        time_pattern = r'(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})'
+                        time_match = re.search(time_pattern, lines[1])
+                        
+                        if time_match:
+                            start_time = time_match.group(1).replace('.', ',')
+                            end_time = time_match.group(2).replace('.', ',')
+                            text = '\n'.join(lines[2:]).strip()
+                            
+                            if text:
+                                subtitles.append({
+                                    'index': index,
+                                    'start': start_time,
+                                    'end': end_time,
+                                    'text': text,
+                                    'start_seconds': self._time_to_seconds(start_time),
+                                    'end_seconds': self._time_to_seconds(end_time)
+                                })
+                    except (ValueError, IndexError):
+                        continue
+        else:
+            # 处理其他格式
+            lines = content.split('\n')
+            current_text = []
+            for line in lines:
+                line = line.strip()
+                if line and not line.isdigit():
+                    current_text.append(line)
+            
+            # 简单处理：每行作为一个字幕条目
+            for i, text in enumerate(current_text):
+                if text:
+                    subtitles.append({
+                        'index': i + 1,
+                        'start': f"00:{i*2:02d}:00,000",
+                        'end': f"00:{i*2+2:02d}:00,000",
+                        'text': text,
+                        'start_seconds': i * 2,
+                        'end_seconds': (i + 1) * 2
+                    })
 
-        for block in blocks:
-            lines = block.strip().split('\n')
-            if len(lines) >= 3:
-                try:
-                    index = int(lines[0]) if lines[0].isdigit() else len(subtitles) + 1
-
-                    # 匹配时间格式
-                    time_pattern = r'(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})'
-                    time_match = re.search(time_pattern, lines[1])
-
-                    if time_match:
-                        start_time = time_match.group(1).replace('.', ',')
-                        end_time = time_match.group(2).replace('.', ',')
-                        text = '\n'.join(lines[2:]).strip()
-
-                        if text:
-                            subtitles.append({
-                                'index': index,
-                                'start': start_time,
-                                'end': end_time,
-                                'text': text
-                            })
-                except (ValueError, IndexError):
-                    continue
-
+        if corrected_errors:
+            print(f"✅ 修正错别字: {', '.join(corrected_errors[:3])}{'...' if len(corrected_errors) > 3 else ''}")
+        
         print(f"✅ 解析完成: {len(subtitles)} 条字幕")
         return subtitles
 
-    def detect_genre(self, subtitles: List[Dict]) -> str: #add
-        """智能识别剧情类型""" #add
-        if len(subtitles) < 50: #add
-            return '通用剧' #add
+    def _time_to_seconds(self, time_str: str) -> float:
+        """时间转换为秒"""
+        try:
+            time_str = time_str.replace('.', ',')
+            h, m, s_ms = time_str.split(':')
+            s, ms = s_ms.split(',')
+            return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+        except:
+            return 0.0
 
-        # 分析前200条字幕 #add
-        sample_text = " ".join([sub['text'] for sub in subtitles[:200]]) #add
+    def _seconds_to_time(self, seconds: float) -> str:
+        """秒转换为时间字符串"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        ms = int((seconds % 1) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
-        genre_scores = {} #add
-        genre_patterns = { #add
-            '法律剧': { #add
-                'keywords': ['法官', '检察官', '律师', '法庭', '审判', '证据', '案件', '起诉', '辩护', '判决', '申诉', '听证会', '正当防卫'], #add
-                'weight': 1.0 #add
-            }, #add
-            '爱情剧': { #add
-                'keywords': ['爱情', '喜欢', '心动', '表白', '约会', '分手', '复合', '结婚', '情侣', '恋人', '爱人'], #add
-                'weight': 1.0 #add
-            }, #add
-            '悬疑剧': { #add
-                'keywords': ['真相', '秘密', '调查', '线索', '破案', '凶手', '神秘', '隐瞒', '疑点', '诡异'], #add
-                'weight': 1.0 #add
-            }, #add
-            '家庭剧': { #add
-                'keywords': ['家庭', '父母', '孩子', '兄弟', '姐妹', '亲情', '家人', '团聚', '血缘'], #add
-                'weight': 1.0 #add
-            } #add
-        } #add
-        for genre, pattern in genre_patterns.items(): #add
-            score = 0 #add
-            for keyword in pattern['keywords']: #add
-                score += sample_text.count(keyword) * pattern['weight'] #add
-            genre_scores[genre] = score #add
+    def detect_genre_and_themes(self, subtitles: List[Dict]) -> Tuple[str, List[str]]:
+        """智能识别剧情类型和主题"""
+        if len(subtitles) < 50:
+            return '通用剧', ['日常生活']
 
-        if genre_scores: #add
-            best_genre = max(genre_scores, key=genre_scores.get) #add
-            max_score = genre_scores[best_genre] #add
+        # 分析前300条字幕
+        sample_text = " ".join([sub['text'] for sub in subtitles[:300]])
+        
+        genre_patterns = {
+            '法律剧': {
+                'keywords': ['法官', '检察官', '律师', '法庭', '审判', '证据', '案件', '起诉', '辩护', '判决', '申诉', '听证会', '正当防卫', '法律'],
+                'weight': 1.0
+            },
+            '爱情剧': {
+                'keywords': ['爱情', '喜欢', '心动', '表白', '约会', '分手', '复合', '结婚', '情侣', '恋人', '爱人', '感情', '浪漫'],
+                'weight': 1.0
+            },
+            '悬疑剧': {
+                'keywords': ['真相', '秘密', '调查', '线索', '破案', '凶手', '神秘', '隐瞒', '疑点', '诡异', '谜团', '推理'],
+                'weight': 1.0
+            },
+            '家庭剧': {
+                'keywords': ['家庭', '父母', '孩子', '兄弟', '姐妹', '亲情', '家人', '团聚', '血缘', '亲子', '家族'],
+                'weight': 1.0
+            },
+            '职场剧': {
+                'keywords': ['公司', '工作', '老板', '同事', '职场', '事业', '升职', '项目', '会议', '商务', '职业'],
+                'weight': 1.0
+            },
+            '古装剧': {
+                'keywords': ['皇上', '王爷', '公主', '大人', '官府', '江湖', '武功', '朝廷', '宫廷', '侠客', '古代'],
+                'weight': 1.0
+            }
+        }
 
-            if max_score >= 3: #add
-                self.detected_genre = best_genre #add
-                self.genre_confidence = min(max_score / 20, 1.0) #add
-                print(f"🎭 检测到剧情类型: {best_genre} (置信度: {self.genre_confidence:.2f})") #add
-                return best_genre #add
+        genre_scores = {}
+        for genre, pattern in genre_patterns.items():
+            score = 0
+            for keyword in pattern['keywords']:
+                score += sample_text.count(keyword) * pattern['weight']
+            genre_scores[genre] = score
 
-        self.detected_genre = '通用剧' #add
-        self.genre_confidence = 0.5 #add
-        return '通用剧' #add
+        # 选择最高分的类型
+        best_genre = max(genre_scores, key=genre_scores.get)
+        max_score = genre_scores[best_genre]
+        
+        if max_score < 3:
+            best_genre = '通用剧'
 
-    def analyze_with_ai(self, subtitles: List[Dict], episode_num: str, episode_context: str = "") -> Optional[Dict]:
-        """使用AI分析剧情点 - 使用完整字幕"""
+        # 识别主题
+        theme_patterns = {
+            '正义与法律': ['正义', '法律', '公平', '真相', '维权'],
+            '爱情与情感': ['爱情', '感情', '心动', '浪漫', '情深'],
+            '家庭与亲情': ['家庭', '亲情', '父母', '孩子', '团聚'],
+            '成长与蜕变': ['成长', '改变', '坚持', '努力', '突破'],
+            '友情与信任': ['朋友', '信任', '支持', '帮助', '友谊'],
+            '事业与梦想': ['梦想', '事业', '成功', '努力', '坚持']
+        }
+
+        detected_themes = []
+        for theme, keywords in theme_patterns.items():
+            theme_score = sum(sample_text.count(kw) for kw in keywords)
+            if theme_score >= 2:
+                detected_themes.append(theme)
+
+        if not detected_themes:
+            detected_themes = ['人生感悟']
+
+        self.series_context['genre_detected'] = best_genre
+        self.series_context['main_themes'] = detected_themes
+
+        print(f"🎭 检测到剧情类型: {best_genre}")
+        print(f"🎯 主要主题: {', '.join(detected_themes)}")
+
+        return best_genre, detected_themes
+
+    def build_series_context(self, episode_num: str) -> str:
+        """构建全剧上下文信息"""
+        context_parts = []
+        
+        if self.series_context['previous_episodes']:
+            context_parts.append("【前情回顾】")
+            for prev_ep in self.series_context['previous_episodes'][-3:]:
+                context_parts.append(f"第{prev_ep['episode']}集: {prev_ep['summary']}")
+            context_parts.append("")
+
+        if self.series_context['genre_detected']:
+            context_parts.append(f"【剧情类型】{self.series_context['genre_detected']}")
+            context_parts.append("")
+
+        if self.series_context['main_themes']:
+            context_parts.append(f"【主要主题】{', '.join(self.series_context['main_themes'])}")
+            context_parts.append("")
+
+        if self.series_context['main_storylines']:
+            context_parts.append("【主要故事线】")
+            for storyline in self.series_context['main_storylines'][-5:]:
+                context_parts.append(f"• {storyline}")
+            context_parts.append("")
+
+        if self.series_context['ongoing_conflicts']:
+            context_parts.append("【持续冲突】")
+            for conflict in self.series_context['ongoing_conflicts'][-3:]:
+                context_parts.append(f"• {conflict}")
+            context_parts.append("")
+
+        return '\n'.join(context_parts) if context_parts else f"正在分析第{episode_num}集的剧情内容"
+
+    def get_analysis_cache_path(self, srt_file: str) -> str:
+        """获取分析结果缓存路径"""
+        file_hash = self.get_file_hash(os.path.join(self.srt_folder, srt_file))
+        episode_num = self._extract_episode_number(srt_file)
+        return os.path.join(self.analysis_cache_folder, f"analysis_E{episode_num}_{file_hash}.json")
+
+    def save_analysis_cache(self, srt_file: str, analysis_result: Dict):
+        """保存分析结果到缓存"""
+        cache_path = self.get_analysis_cache_path(srt_file)
+        try:
+            analysis_result['cache_timestamp'] = datetime.now().isoformat()
+            analysis_result['source_file'] = srt_file
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                json.dump(analysis_result, f, ensure_ascii=False, indent=2)
+            print(f"💾 分析结果已缓存: {os.path.basename(cache_path)}")
+        except Exception as e:
+            print(f"⚠️ 缓存保存失败: {e}")
+
+    def load_analysis_cache(self, srt_file: str) -> Optional[Dict]:
+        """从缓存加载分析结果"""
+        cache_path = self.get_analysis_cache_path(srt_file)
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, 'r', encoding='utf-8') as f:
+                    result = json.load(f)
+                print(f"💾 使用缓存的分析结果: {os.path.basename(cache_path)}")
+                return result
+            except Exception as e:
+                print(f"⚠️ 缓存读取失败: {e}")
+        return None
+
+    def ai_analyze_episode_complete(self, subtitles: List[Dict], episode_num: str, genre: str, themes: List[str], series_context: str) -> Optional[Dict]:
+        """使用AI分析完整集数 - 支持各种剧情类型"""
         if not self.ai_config.get('enabled'):
             return None
 
-        # 使用全部字幕文本，不截断
-        subtitle_text = "\n".join([f"[{sub['start']}] {sub['text']}" for sub in subtitles])
+        # 构建完整的剧情文本
+        full_subtitle_text = "\n".join([f"[{sub['start']} --> {sub['end']}] {sub['text']}" for sub in subtitles])
         
-        # 动态生成上下文信息
-        context_info = f"\n【前情提要】{episode_context}" if episode_context else ""
+        # 根据剧情类型调整提示词
+        genre_specific_guidance = self._get_genre_specific_guidance(genre)
         
-        # 计算总时长用于参考
-        total_duration = self._time_to_seconds(subtitles[-1]['end']) if subtitles else 0
-        
-        prompt = f"""你是资深电视剧剪辑师，现在要为第{episode_num}集制作精彩短视频片段。
+        prompt = f"""你是专业的电视剧剧情分析师，现在要分析第{episode_num}集的内容，识别最精彩的剧情点。
 
-【完整剧集信息】
+【剧集基本信息】
 - 集数：第{episode_num}集
-- 总时长：{total_duration//60:.0f}分钟{episode_context}
+- 剧情类型：{genre}
+- 主要主题：{', '.join(themes)}
+- 总时长：{len(subtitles)}条字幕
+
+【全剧上下文】
+{series_context}
+
+【类型特定指导】
+{genre_specific_guidance}
 
 【完整字幕内容】
-{subtitle_text}
+{full_subtitle_text}
 
-【专业分析要求】
-请深度分析这一集的完整内容，识别出3-4个最具观赏价值的片段：
+请深度分析这一集，识别3-4个最精彩的剧情点片段，每个片段2-3分钟。
 
-1. 每个片段必须是完整的戏剧单元（120-200秒）
-2. 时间点必须精确到秒，确保在字幕范围内
-3. 片段类型要多样化，避免重复
-4. 考虑剧情连贯性和情感递进
-5. 每集分析结果应该独特，体现该集特色
+要求：
+1. 片段必须包含完整的对话场景，确保句子完整
+2. 每个片段要有明确的剧情价值（冲突、转折、揭露、情感爆发等）
+3. 时间点必须精确，在字幕范围内
+4. 支持非连续时间段的合理组合
+5. 生成第三人称旁白，适合短视频解说
 
-【输出要求】
-严格按照以下JSON格式输出，时间格式必须是 HH:MM:SS,mmm：
+请严格按照以下JSON格式输出：
 
 {{
     "episode_analysis": {{
         "episode_number": "{episode_num}",
-        "genre": "具体剧情类型（如法律剧/悬疑剧等）",
-        "main_theme": "第{episode_num}集的核心主题",
-        "unique_features": ["该集独有特点1", "该集独有特点2"],
-        "emotional_arc": "情感发展脉络"
+        "genre": "{genre}",
+        "main_theme": "本集核心主题",
+        "story_progression": "在整个剧情中的作用",
+        "emotional_arc": "情感发展线",
+        "key_characters": ["主要角色1", "主要角色2"],
+        "main_conflicts": ["核心冲突1", "核心冲突2"]
     }},
     "plot_points": [
         {{
-            "plot_type": "剧情点类型（关键冲突/人物转折/线索揭露/情感爆发/重要对话）",
-            "title": "具体片段标题（体现该集特色）",
-            "start_time": "HH:MM:SS,mmm",
-            "end_time": "HH:MM:SS,mmm", 
-            "duration": 具体秒数,
-            "plot_significance": "在整个剧集中的意义",
-            "content_summary": "片段详细内容概述",
-            "key_dialogues": ["核心对话1", "核心对话2"],
-            "third_person_narration": "适合短视频的第三人称解说",
+            "type": "剧情点类型（关键冲突/人物转折/线索揭露/情感爆发/重要对话/主题升华）",
+            "title": "精彩片段标题",
+            "time_segments": [
+                {{
+                    "start_time": "开始时间（HH:MM:SS,mmm）",
+                    "end_time": "结束时间（HH:MM:SS,mmm）",
+                    "reason": "选择这个时间段的原因"
+                }}
+            ],
+            "total_duration": 片段总时长秒数,
+            "plot_significance": "在剧情中的重要意义",
+            "content_summary": "片段内容详细概述",
+            "key_dialogues": ["关键台词1", "关键台词2"],
+            "third_person_narration": "第三人称旁白解说文本",
             "content_highlights": ["观众关注点1", "观众关注点2"],
-            "emotional_peak": "情感高潮描述",
-            "visual_elements": "画面重点元素"
+            "emotional_impact": "情感冲击描述",
+            "connection_setup": "为后续剧情的铺垫"
         }}
-    ]
+    ],
+    "episode_summary": {{
+        "core_storyline": "本集核心故事线",
+        "character_development": "角色发展变化",
+        "plot_advancement": "剧情推进要点",
+        "cliffhanger_or_resolution": "悬念设置或解决",
+        "next_episode_connection": "与下一集的衔接点说明"
+    }}
 }}
 
-【特别注意】
-- 时间必须在字幕范围内，检查首末字幕时间
-- 每个片段要有明确的开始和结束标志
-- 确保片段具有独立的戏剧价值
-- 第{episode_num}集要有该集独特的分析角度"""
+注意：
+- 时间必须在字幕范围内：{subtitles[0]['start']} 到 {subtitles[-1]['end']}
+- 确保每个片段有完整的戏剧价值
+- 第三人称旁白要专业且吸引人
+- 考虑跨集连贯性"""
 
-        system_prompt = f"""你是专业的影视剪辑师，具有丰富的电视剧分析经验。你的任务是：
-1. 深度理解剧情发展脉络
-2. 准确识别戏剧高潮点
-3. 确保时间段的准确性
-4. 为每集提供独特的分析视角
-5. 生成适合短视频传播的内容
+        system_prompt = f"""你是资深的{genre}分析专家，具有丰富的电视剧剪辑经验。你的任务是：
+1. 深度理解{genre}的特点和观众期待
+2. 准确识别该类型剧集的精彩时刻
+3. 确保时间段的准确性和完整性
+4. 生成专业的剧情分析和旁白
+5. 保证跨集剧情连贯性
 
-请确保每次分析都体现该集的独特性，避免千篇一律的结果。"""
+请确保分析结果具有该集的独特性，体现{genre}的特色。"""
 
-        response = self.call_ai_api(prompt, system_prompt)
-        if response:
-            try:
+        try:
+            print(f"🤖 AI深度分析第{episode_num}集中...")
+            response = self.call_ai_api(prompt, system_prompt)
+            
+            if response:
                 # 提取JSON
-                if "```json" in response:
-                    start = response.find("```json") + 7
-                    end = response.find("```", start)
-                    json_text = response[start:end]
-                elif "```" in response:
-                    start = response.find("```") + 3
-                    end = response.rfind("```")
-                    json_text = response[start:end]
-                else:
-                    start = response.find("{")
-                    end = response.rfind("}") + 1
-                    json_text = response[start:end]
+                try:
+                    if "```json" in response:
+                        start = response.find("```json") + 7
+                        end = response.find("```", start)
+                        json_text = response[start:end]
+                    elif "```" in response:
+                        start = response.find("```") + 3
+                        end = response.rfind("```")
+                        json_text = response[start:end]
+                    else:
+                        start = response.find("{")
+                        end = response.rfind("}") + 1
+                        json_text = response[start:end]
 
-                result = json.loads(json_text)
+                    result = json.loads(json_text)
+                    
+                    # 验证和修正时间范围
+                    if self._validate_and_fix_time_ranges(result.get('plot_points', []), subtitles):
+                        print(f"✅ AI分析成功: {len(result.get('plot_points', []))} 个剧情点")
+                        return result
+                    else:
+                        print(f"⚠️ AI返回的时间范围无效")
+                        return None
+
+                except json.JSONDecodeError as e:
+                    print(f"⚠️ AI响应JSON解析失败: {e}")
+                    print(f"原始响应前300字符: {response[:300]}")
+                except Exception as e:
+                    print(f"⚠️ AI响应处理失败: {e}")
+
+            return None
+
+        except Exception as e:
+            print(f"⚠️ AI分析过程出错: {e}")
+            return None
+
+    def _get_genre_specific_guidance(self, genre: str) -> str:
+        """根据剧情类型提供特定指导"""
+        guidance = {
+            '法律剧': """
+重点关注：
+- 法庭辩论的精彩对抗
+- 证据揭露的关键时刻
+- 正义与法理的冲突
+- 角色信念的坚持与妥协
+- 案件真相的逐步揭示""",
+            
+            '爱情剧': """
+重点关注：
+- 情感表白或冲突的高潮时刻
+- 角色关系的转折点
+- 误会产生或解除的关键场景
+- 浪漫或心动的经典时刻
+- 情感纠葛的复杂表现""",
+            
+            '悬疑剧': """
+重点关注：
+- 线索揭露的关键时刻
+- 真相大白的震撼场景
+- 推理过程的精彩展示
+- 反转情节的巧妙设计
+- 紧张氛围的营造""",
+            
+            '家庭剧': """
+重点关注：
+- 家庭成员间的情感冲突
+- 亲情表达的温馨时刻
+- 家庭矛盾的爆发与和解
+- 代际观念的碰撞
+- 家庭责任的承担""",
+            
+            '职场剧': """
+重点关注：
+- 职场竞争的激烈时刻
+- 事业转折的关键决定
+- 同事关系的复杂变化
+- 职业理想与现实的冲突
+- 团队合作或背叛的情节""",
+            
+            '古装剧': """
+重点关注：
+- 权力斗争的精彩博弈
+- 江湖情仇的恩怨纠葛
+- 忠诚与背叛的道德考验
+- 武功对决的精彩场面
+- 家国情怀的深刻表达"""
+        }
+        
+        return guidance.get(genre, """
+重点关注：
+- 剧情发展的关键转折点
+- 角色情感的深度表达
+- 矛盾冲突的激烈时刻
+- 主题思想的深刻体现
+- 观众情感的共鸣点""")
+
+    def _validate_and_fix_time_ranges(self, plot_points: List[Dict], subtitles: List[Dict]) -> bool:
+        """验证和修正AI返回的时间范围"""
+        if not plot_points or not subtitles:
+            return False
+            
+        first_subtitle_time = subtitles[0]['start']
+        last_subtitle_time = subtitles[-1]['end']
+        
+        first_seconds = self._time_to_seconds(first_subtitle_time)
+        last_seconds = self._time_to_seconds(last_subtitle_time)
+        
+        for point in plot_points:
+            time_segments = point.get('time_segments', [])
+            if not time_segments:
+                print(f"⚠️ 缺少时间段信息: {point.get('title', '未知片段')}")
+                return False
+            
+            total_duration = 0
+            valid_segments = []
+            
+            for segment in time_segments:
+                start_time = segment.get('start_time', '')
+                end_time = segment.get('end_time', '')
                 
-                # 验证时间范围的有效性
-                if self._validate_time_ranges(result.get('plot_points', []), subtitles):
-                    print(f"🤖 AI分析成功: {len(result.get('plot_points', []))} 个片段")
-                    return result
-                else:
-                    print(f"⚠️ AI返回的时间范围无效，使用基础规则分析")
-                    return None
+                if not start_time or not end_time:
+                    continue
+                    
+                start_seconds = self._time_to_seconds(start_time)
+                end_seconds = self._time_to_seconds(end_time)
+                
+                # 检查时间是否在字幕范围内
+                if start_seconds < first_seconds or end_seconds > last_seconds:
+                    # 尝试修正到最接近的字幕时间
+                    closest_start = min(subtitles, key=lambda s: abs(s['start_seconds'] - start_seconds))
+                    closest_end = min(subtitles, key=lambda s: abs(s['end_seconds'] - end_seconds))
+                    
+                    segment['start_time'] = closest_start['start']
+                    segment['end_time'] = closest_end['end']
+                    
+                    start_seconds = closest_start['start_seconds']
+                    end_seconds = closest_end['end_seconds']
+                    print(f"⚙️ 时间已修正: {segment['start_time']} - {segment['end_time']}")
+                
+                # 检查时间段是否有效
+                if start_seconds >= end_seconds:
+                    print(f"⚠️ 无效时间段: {start_time}-{end_time}")
+                    continue
+                    
+                segment_duration = end_seconds - start_seconds
+                total_duration += segment_duration
+                valid_segments.append(segment)
+            
+            if not valid_segments:
+                print(f"⚠️ 没有有效的时间段: {point.get('title', '未知片段')}")
+                return False
+            
+            # 更新时间段和总时长
+            point['time_segments'] = valid_segments
+            point['total_duration'] = total_duration
+            
+            # 检查总时长是否合理（60-300秒）
+            if total_duration < 60:
+                print(f"⚠️ 时长过短: {total_duration:.1f}秒 - {point.get('title', '未知片段')}")
+            elif total_duration > 300:
+                print(f"⚠️ 时长过长: {total_duration:.1f}秒 - {point.get('title', '未知片段')}")
+                
+        return True
 
-            except json.JSONDecodeError as e:
-                print(f"⚠️ AI响应JSON解析失败: {e}")
-                print(f"原始响应前200字符: {response[:200]}")
-            except Exception as e:
-                print(f"⚠️ AI响应处理失败: {e}")
-
-        return None
-
-    def analyze_plot_points_basic(self, subtitles: List[Dict], episode_num: str) -> List[Dict]:
-        """基础规则分析剧情点"""
+    def analyze_plot_points_basic(self, subtitles: List[Dict], episode_num: str, genre: str, themes: List[str]) -> List[Dict]:
+        """基础规则分析剧情点 - 根据剧情类型优化"""
         if not subtitles:
             return []
 
         plot_points = []
-        window_size = 20  # 分析窗口大小
-
-        # 检测剧情类型 #add
-        if self.detected_genre is None: #add
-            self.detect_genre(subtitles) #add
+        window_size = 25  # 分析窗口大小
+        
+        # 根据剧情类型调整权重
+        type_weights = self._get_genre_weights(genre)
 
         # 滑动窗口分析
-        for i in range(0, len(subtitles) - window_size, 10):
+        for i in range(0, len(subtitles) - window_size, 15):
             window_subtitles = subtitles[i:i + window_size]
             combined_text = ' '.join([sub['text'] for sub in window_subtitles])
 
@@ -609,20 +915,27 @@ class IntelligentTVClipperSystem:
 
                 # 关键词匹配
                 for keyword in config['keywords']:
-                    score += combined_text.count(keyword) * config['weight']
+                    matches = combined_text.count(keyword)
+                    score += matches * config['weight'] * type_weights.get(plot_type, 1.0)
 
-                # 标点符号强度
-                score += combined_text.count('！') * 2
-                score += combined_text.count('？') * 1.5
-                score += combined_text.count('...') * 1
+                # 情感强度评分
+                score += combined_text.count('！') * 2.5
+                score += combined_text.count('？') * 2.0
+                score += combined_text.count('...') * 1.5
+
+                # 位置权重（开头和结尾更重要）
+                position_ratio = i / len(subtitles)
+                if position_ratio < 0.25 or position_ratio > 0.75:
+                    score *= 1.2
 
                 plot_scores[plot_type] = score
 
             # 找到最高分的剧情点类型
             best_plot_type = max(plot_scores, key=plot_scores.get)
             best_score = plot_scores[best_plot_type]
+            min_score = self.plot_point_types[best_plot_type]['min_score']
 
-            if best_score >= 12:  # 阈值
+            if best_score >= min_score:
                 plot_points.append({
                     'start_index': i,
                     'end_index': i + window_size - 1,
@@ -631,20 +944,59 @@ class IntelligentTVClipperSystem:
                     'content': combined_text
                 })
 
-        # 去重和选择最佳剧情点
+        # 去重和优化
         plot_points = self._deduplicate_plot_points(plot_points)
         plot_points.sort(key=lambda x: x['score'], reverse=True)
         selected_points = plot_points[:4]  # 每集最多4个片段
         selected_points.sort(key=lambda x: x['start_index'])
 
-        # 优化剧情点片段
-        optimized_points = []
+        # 构建最终剧情点
+        final_plot_points = []
         for point in selected_points:
-            optimized_point = self._optimize_plot_point(subtitles, point, episode_num)
+            optimized_point = self._optimize_plot_point_advanced(subtitles, point, episode_num, genre)
             if optimized_point:
-                optimized_points.append(optimized_point)
+                final_plot_points.append(optimized_point)
 
-        return optimized_points
+        return final_plot_points
+
+    def _get_genre_weights(self, genre: str) -> Dict[str, float]:
+        """根据剧情类型获取权重调整"""
+        weights = {
+            '法律剧': {
+                '关键冲突': 1.5,
+                '线索揭露': 1.4,
+                '重要对话': 1.3,
+                '主题升华': 1.2,
+                '人物转折': 1.0,
+                '情感爆发': 0.8
+            },
+            '爱情剧': {
+                '情感爆发': 1.5,
+                '人物转折': 1.4,
+                '重要对话': 1.3,
+                '关键冲突': 1.1,
+                '主题升华': 1.0,
+                '线索揭露': 0.8
+            },
+            '悬疑剧': {
+                '线索揭露': 1.5,
+                '关键冲突': 1.3,
+                '人物转折': 1.2,
+                '重要对话': 1.1,
+                '情感爆发': 1.0,
+                '主题升华': 0.9
+            },
+            '家庭剧': {
+                '情感爆发': 1.4,
+                '人物转折': 1.3,
+                '重要对话': 1.3,
+                '关键冲突': 1.1,
+                '主题升华': 1.1,
+                '线索揭露': 0.8
+            }
+        }
+        
+        return weights.get(genre, {key: 1.0 for key in self.plot_point_types.keys()})
 
     def _deduplicate_plot_points(self, plot_points: List[Dict]) -> List[Dict]:
         """去除重叠的剧情点"""
@@ -663,13 +1015,13 @@ class IntelligentTVClipperSystem:
                     deduplicated[-1] = point
             else:
                 gap = point['start_index'] - last_point['end_index']
-                if gap >= 30:  # 至少间隔30个字幕条
+                if gap >= 35:  # 至少间隔35个字幕条
                     deduplicated.append(point)
 
         return deduplicated
 
-    def _optimize_plot_point(self, subtitles: List[Dict], plot_point: Dict, episode_num: str) -> Optional[Dict]:
-        """优化剧情点片段，确保完整句子"""
+    def _optimize_plot_point_advanced(self, subtitles: List[Dict], plot_point: Dict, episode_num: str, genre: str) -> Optional[Dict]:
+        """优化剧情点片段 - 高级版"""
         plot_type = plot_point['plot_type']
         target_duration = self.plot_point_types[plot_type]['ideal_duration']
 
@@ -679,6 +1031,7 @@ class IntelligentTVClipperSystem:
         # 扩展到目标时长
         current_duration = self._calculate_duration(subtitles, start_idx, end_idx)
 
+        # 智能扩展
         while current_duration < target_duration and (start_idx > 0 or end_idx < len(subtitles) - 1):
             if end_idx < len(subtitles) - 1:
                 end_idx += 1
@@ -688,211 +1041,295 @@ class IntelligentTVClipperSystem:
                 start_idx -= 1
                 current_duration = self._calculate_duration(subtitles, start_idx, end_idx)
 
-            if current_duration >= target_duration * 1.2:
+            if current_duration >= target_duration * 1.3:
                 break
 
         # 寻找完整句子边界
-        start_idx = self._find_sentence_start(subtitles, start_idx)
-        end_idx = self._find_sentence_end(subtitles, end_idx)
+        start_idx = self._find_sentence_start_advanced(subtitles, start_idx)
+        end_idx = self._find_sentence_end_advanced(subtitles, end_idx)
 
-        # 生成片段信息
+        # 生成时间段信息
+        time_segments = [{
+            'start_time': subtitles[start_idx]['start'],
+            'end_time': subtitles[end_idx]['end'],
+            'reason': f'{plot_type}核心片段'
+        }]
+
         final_duration = self._calculate_duration(subtitles, start_idx, end_idx)
-        start_time = subtitles[start_idx]['start']
-        end_time = subtitles[end_idx]['end']
 
         return {
-            'episode_number': episode_num,
-            'plot_type': plot_type,
-            'title': f"E{episode_num}-{plot_type}：剧情核心时刻",
-            'start_time': start_time,
-            'end_time': end_time,
-            'duration': final_duration,
+            'type': plot_type,
+            'title': f"第{episode_num}集-{plot_type}：{self._generate_segment_title(subtitles, start_idx, end_idx, plot_type, genre)}",
+            'time_segments': time_segments,
+            'total_duration': final_duration,
+            'plot_significance': self._generate_plot_significance(plot_type, genre),
+            'content_summary': self._generate_content_summary_advanced(subtitles, start_idx, end_idx, plot_type),
+            'key_dialogues': self._extract_key_dialogues_advanced(subtitles, start_idx, end_idx),
+            'third_person_narration': self._generate_third_person_narration_advanced(subtitles, start_idx, end_idx, plot_type, genre),
+            'content_highlights': self._generate_content_highlights(plot_type, genre),
+            'emotional_impact': self._generate_emotional_impact(plot_type),
+            'connection_setup': f"为第{int(episode_num)+1}集的{plot_type}发展做铺垫",
             'start_index': start_idx,
             'end_index': end_idx,
-            'score': plot_point['score'],
-            'plot_significance': f"{plot_type}重要剧情发展节点",
-            'content_summary': self._generate_content_summary(subtitles, start_idx, end_idx),
-            'third_person_narration': self._generate_third_person_narration(subtitles, start_idx, end_idx, plot_type),
-            'content_highlights': ["精彩剧情发展", "角色深度刻画"],
-            'corrected_errors': self._get_corrected_errors_in_segment(subtitles, start_idx, end_idx) #add
+            'score': plot_point['score']
         }
 
-    def _find_sentence_start(self, subtitles: List[Dict], start_idx: int) -> int:
-        """寻找完整句子的开始点"""
-        sentence_starters = ['那么', '现在', '这时', '突然', '接下来', '首先', '然后', '于是', '随着', '刚才', '但是', '不过', '因为', '所以'] #add
+    def _find_sentence_start_advanced(self, subtitles: List[Dict], start_idx: int) -> int:
+        """寻找完整句子的开始点 - 高级版"""
+        sentence_starters = [
+            '那么', '现在', '这时', '突然', '接下来', '首先', '然后', '于是', '随着', 
+            '刚才', '但是', '不过', '因为', '所以', '既然', '虽然', '尽管', '然而',
+            '另外', '此外', '而且', '同时', '接着', '紧接着', '随后', '后来'
+        ]
 
-        for i in range(start_idx, max(0, start_idx - 10), -1):
+        for i in range(start_idx, max(0, start_idx - 15), -1):
             if i < len(subtitles):
                 text = subtitles[i]['text']
-                if any(starter in text[:10] for starter in sentence_starters):
+                
+                # 检查是否是自然的开始
+                if any(starter in text[:15] for starter in sentence_starters):
                     return i
-                if i > 0 and any(subtitles[i-1]['text'].endswith(end) for end in ['。', '！', '？', '...', '——']): #add ... ——
+                    
+                # 检查前一句是否结束
+                if i > 0:
+                    prev_text = subtitles[i-1]['text']
+                    if any(prev_text.endswith(end) for end in ['。', '！', '？', '...', '——']):
+                        return i
+                
+                # 检查是否是对话开始
+                if text.startswith('"') or text.startswith('"') or '：' in text[:10]:
                     return i
-                if text.startswith('"') or text.startswith('"'): #add
-                    return i #add
 
         return start_idx
 
-    def _find_sentence_end(self, subtitles: List[Dict], end_idx: int) -> int:
-        """寻找完整句子的结束点"""
-        sentence_enders = ['。', '！', '？', '...', '——', '"', '"'] #add "
+    def _find_sentence_end_advanced(self, subtitles: List[Dict], end_idx: int) -> int:
+        """寻找完整句子的结束点 - 高级版"""
+        sentence_enders = ['。', '！', '？', '...', '——', '"', '"', '】', '）']
 
-        for i in range(end_idx, min(len(subtitles), end_idx + 10)):
+        for i in range(end_idx, min(len(subtitles), end_idx + 15)):
             if i < len(subtitles):
                 text = subtitles[i]['text']
+                
+                # 找到自然结束点
                 if any(text.endswith(ender) for ender in sentence_enders):
                     return i
+                
+                # 检查是否是段落结束
+                if len(text) < 10 and any(ender in text for ender in sentence_enders):
+                    return i
 
-        return end_idx
+        return min(end_idx, len(subtitles) - 1)
 
     def _calculate_duration(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> float:
         """计算字幕片段的时长"""
         if start_idx >= len(subtitles) or end_idx >= len(subtitles):
             return 0
 
-        start_seconds = self._time_to_seconds(subtitles[start_idx]['start'])
-        end_seconds = self._time_to_seconds(subtitles[end_idx]['end'])
+        start_seconds = subtitles[start_idx]['start_seconds']
+        end_seconds = subtitles[end_idx]['end_seconds']
         return end_seconds - start_seconds
 
-    def _time_to_seconds(self, time_str: str) -> float:
-        """时间转换为秒"""
-        try:
-            time_str = time_str.replace('.', ',')
-            h, m, s_ms = time_str.split(':')
-            s, ms = s_ms.split(',')
-            return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
-        except:
-            return 0.0
-
-    def _generate_content_summary(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> str:
-        """生成内容摘要"""
-        content = ' '.join([subtitles[i]['text'] for i in range(start_idx, min(end_idx + 1, start_idx + 20))])
-        return f"核心剧情发展，{content[:50]}..."
-
-    def _generate_third_person_narration(self, subtitles: List[Dict], start_idx: int, end_idx: int, plot_type: str) -> str:
-        """生成第三人称旁白"""
+    def _generate_segment_title(self, subtitles: List[Dict], start_idx: int, end_idx: int, plot_type: str, genre: str) -> str:
+        """生成片段标题"""
+        content = ' '.join([subtitles[i]['text'] for i in range(start_idx, min(end_idx + 1, start_idx + 5))])
+        
+        # 根据类型和内容生成标题
         if plot_type == '关键冲突':
-            return "此时双方展开激烈辩论，各自坚持己见，争议焦点逐渐明朗。关键证据的效力成为争议核心，每一个细节都可能影响最终判决。"
-        elif plot_type == '人物转折':
-            return "在经历了内心的挣扎后，主人公终于做出了关键决定。这个选择将改变他们的人生轨迹，也为故事带来新的转机。"
+            if '法庭' in content or '审判' in content:
+                return "法庭激辩，针锋相对"
+            elif '争论' in content or '质疑' in content:
+                return "激烈争论，观点交锋"
+            else:
+                return "关键冲突爆发"
         elif plot_type == '线索揭露':
-            return "隐藏已久的真相终于浮出水面，这个发现震撼了所有人。事情的真实面貌远比想象的复杂，为案件调查开辟了新的方向。"
+            if ('证据' in content or '发现' in content):
+                return "关键证据浮出水面"
+            elif '真相' in content:
+                return "真相大白时刻"
+            else:
+                return "重要线索揭露"
         elif plot_type == '情感爆发':
-            return "情感在此刻达到了临界点，内心的压抑和痛苦再也无法掩饰。这种真实的情感表达触动人心，让观众深深感受到角色的内心世界。"
+            if '哭' in content or '泪' in content:
+                return "情感决堤，泪如雨下"
+            elif '愤怒' in content or '激动' in content:
+                return "情感爆发，震撼人心"
+            else:
+                return "深度情感表达"
+        elif plot_type == '人物转折':
+            return "关键抉择，人生转折"
+        elif plot_type == '重要对话':
+            return "深度对话，揭示内心"
         else:
-            return f"在这个{plot_type}的重要时刻，剧情迎来关键发展。角色面临重要选择，每个决定都将影响故事的走向。"
+            return "精彩剧情片段"
 
-    def _get_corrected_errors_in_segment(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> List[str]: #add
-        """获取该片段中修正的错别字""" #add
-        corrected = [] #add
-        content = ' '.join([subtitles[i]['text'] for i in range(start_idx, end_idx + 1)]) #add
+    def _generate_plot_significance(self, plot_type: str, genre: str) -> str:
+        """生成剧情意义"""
+        significance_map = {
+            '关键冲突': f"在{genre}中，此冲突代表核心矛盾的激化，推动剧情走向高潮",
+            '线索揭露': f"关键信息的披露，为{genre}的主要悬念提供重要线索",
+            '情感爆发': f"角色内心情感的集中表达，体现{genre}的人物深度",
+            '人物转折': f"角色成长和改变的关键节点，推动{genre}的角色弧线发展",
+            '重要对话': f"承载重要信息和情感的对话，体现{genre}的叙事深度",
+            '主题升华': f"体现{genre}核心价值观和深层主题的重要时刻"
+        }
+        
+        return significance_map.get(plot_type, "推动剧情发展的重要片段")
 
-        for old, new in self.corrections.items(): #add
-            if old in content: #add
-                corrected.append(f"'{old}' → '{new}'") #add
+    def _generate_content_summary_advanced(self, subtitles: List[Dict], start_idx: int, end_idx: int, plot_type: str) -> str:
+        """生成高级内容摘要"""
+        content = ' '.join([subtitles[i]['text'] for i in range(start_idx, min(end_idx + 1, start_idx + 20))])
+        
+        summary_template = {
+            '关键冲突': f"在这个{plot_type}片段中，双方展开激烈对抗。{content[:80]}...矛盾达到白热化程度。",
+            '线索揭露': f"重要{plot_type}时刻，关键信息得以披露。{content[:80]}...为真相大白奠定基础。",
+            '情感爆发': f"角色情感在此刻得到充分释放。{content[:80]}...深深触动观众内心。",
+            '人物转折': f"角色面临重要抉择时刻。{content[:80]}...人生轨迹因此改变。",
+            '重要对话': f"承载重要信息的深度对话。{content[:80]}...揭示角色内心世界。",
+            '主题升华': f"体现深层主题的重要时刻。{content[:80]}...引发深度思考。"
+        }
+        
+        return summary_template.get(plot_type, f"精彩的{plot_type}片段。{content[:80]}...展现剧情魅力。")
 
-        return corrected #add
-
-    def _validate_time_ranges(self, plot_points: List[Dict], subtitles: List[Dict]) -> bool:
-        """验证AI返回的时间范围是否有效"""
-        if not plot_points or not subtitles:
-            return False
+    def _extract_key_dialogues_advanced(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> List[str]:
+        """提取关键台词 - 高级版"""
+        key_dialogues = []
+        
+        # 关键词和情感强度评分
+        priority_keywords = [
+            '真相', '证据', '正义', '坚持', '相信', '希望', '责任', '选择', '决定',
+            '对不起', '谢谢', '爱', '恨', '痛苦', '快乐', '成功', '失败', '梦想'
+        ]
+        
+        for i in range(start_idx, min(end_idx + 1, start_idx + 25)):
+            subtitle = subtitles[i]
+            text = subtitle['text']
             
-        first_subtitle_time = subtitles[0]['start']
-        last_subtitle_time = subtitles[-1]['end']
-        
-        first_seconds = self._time_to_seconds(first_subtitle_time)
-        last_seconds = self._time_to_seconds(last_subtitle_time)
-        
-        for point in plot_points:
-            start_time = point.get('start_time', '')
-            end_time = point.get('end_time', '')
+            # 评分系统
+            score = 0
             
-            if not start_time or not end_time:
-                print(f"⚠️ 缺少时间信息: {point.get('title', '未知片段')}")
-                return False
-                
-            start_seconds = self._time_to_seconds(start_time)
-            end_seconds = self._time_to_seconds(end_time)
+            # 关键词评分
+            for keyword in priority_keywords:
+                if keyword in text:
+                    score += 3
             
-            # 检查时间是否在字幕范围内
-            if start_seconds < first_seconds or end_seconds > last_seconds:
-                print(f"⚠️ 时间超出范围: {start_time}-{end_time} (字幕范围: {first_subtitle_time}-{last_subtitle_time})")
-                return False
-                
-            # 检查时间段是否有效
-            if start_seconds >= end_seconds:
-                print(f"⚠️ 无效时间段: {start_time}-{end_time}")
-                return False
-                
-            # 检查时长是否合理（60-300秒）
-            duration = end_seconds - start_seconds
-            if duration < 60 or duration > 300:
-                print(f"⚠️ 时长不合理: {duration:.1f}秒")
-                return False
-                
-        return True
-
-    def _build_episode_context(self, episode_num: str, subtitles: List[Dict]) -> str:
-        """构建集数上下文信息"""
-        if episode_num in self.episode_contexts:
-            return self.episode_contexts[episode_num]
+            # 情感强度评分
+            score += text.count('！') * 2
+            score += text.count('？') * 1.5
+            score += text.count('...') * 1
             
-        # 分析该集的基本信息
-        all_text = " ".join([sub['text'] for sub in subtitles])
+            # 长度评分（10-50字最佳）
+            if 10 <= len(text) <= 50:
+                score += 2
+            
+            # 对话标识评分
+            if '：' in text or '"' in text:
+                score += 1
+            
+            if score >= 4 and len(text) >= 8:
+                key_dialogues.append(f"[{subtitle['start']}] {text}")
         
-        # 提取关键角色
-        key_characters = []
-        character_patterns = ['检察官', '律师', '法官', '被告', '证人', '警察']
-        for pattern in character_patterns:
-            if pattern in all_text:
-                key_characters.append(pattern)
-                
-        # 提取关键事件
-        key_events = []
-        event_patterns = ['案件', '审判', '证据', '听证会', '申诉', '调查']
-        for pattern in event_patterns:
-            if pattern in all_text:
-                key_events.append(pattern)
+        # 排序并选择最佳的6个
+        return key_dialogues[:6]
+
+    def _generate_third_person_narration_advanced(self, subtitles: List[Dict], start_idx: int, end_idx: int, plot_type: str, genre: str) -> str:
+        """生成高级第三人称旁白"""
+        content = ' '.join([subtitles[i]['text'] for i in range(start_idx, min(end_idx + 1, start_idx + 10))])
         
-        context = f"主要角色：{', '.join(key_characters[:3])}；关键事件：{', '.join(key_events[:3])}"
-        self.episode_contexts[episode_num] = context
+        # 根据剧情类型和片段类型生成专业旁白
+        narration_templates = {
+            ('法律剧', '关键冲突'): "法庭之上，双方律师唇枪舌剑，针锋相对。每一个论点都关乎正义的天平，每一句反驳都可能改变案件走向。在这场没有硝烟的战争中，真理与公正成为最终的裁判。",
+            
+            ('法律剧', '线索揭露'): "关键时刻，隐藏已久的证据终于浮出水面。这个发现如同黑暗中的一束光，照亮了案件的真相。每个细节都被重新审视，每个疑点都得到解答。",
+            
+            ('爱情剧', '情感爆发'): "情感在这一刻决堤而出，再也无法掩饰内心的波澜。眼泪模糊了视线，却让心灵更加清晰。这种真实的情感表达，触动着每一个观众的心弦。",
+            
+            ('悬疑剧', '线索揭露'): "迷雾即将散去，真相的轮廓开始显现。每一个看似微不足道的细节，都是拼图中不可缺少的一片。推理的链条环环相扣，指向那个震撼的答案。",
+            
+            ('家庭剧', '人物转折'): "在人生的十字路口，选择比努力更重要。这个决定将改写人物的命运轨迹，也将重新定义家庭的未来。成长，有时就是在这样的关键时刻完成。"
+        }
         
-        return context
+        # 通用模板
+        generic_templates = {
+            '关键冲突': "矛盾在此刻白热化，各方立场鲜明，寸步不让。这场冲突不仅是观点的交锋，更是价值观的碰撞。每一个字都掷地有声，每一个眼神都充满力量。",
+            
+            '线索揭露': "真相的面纱被缓缓掀开，隐藏的秘密终见天日。这个发现改变了一切，让所有人重新审视已知的事实。真理往往比想象更加震撼人心。",
+            
+            '情感爆发': "情感的闸门在这一瞬间开启，汹涌的情绪如潮水般涌出。这种毫无保留的真情流露，让观众深深共鸣，也让角色更加立体鲜活。",
+            
+            '人物转折': "命运的转折点往往出现在最不经意的时刻。这个选择将彻底改变角色的人生轨迹，也为故事开启全新的篇章。成长与蜕变，就在这关键的一步。",
+            
+            '重要对话': "言语之间蕴含着深刻的内涵，每一句话都意味深长。这样的对话不仅推进剧情发展，更是角色内心世界的真实写照。智慧与情感的交融，让整个场景升华。",
+            
+            '主题升华': "在这个关键时刻，故事的深层主题得到了完美诠释。超越表面的情节，触及人性的本质，引发观众对生活、对人生的深度思考。"
+        }
+        
+        # 优先使用特定类型模板
+        template_key = (genre, plot_type)
+        if template_key in narration_templates:
+            return narration_templates[template_key]
+        else:
+            return generic_templates.get(plot_type, "这是一个精彩的剧情片段，展现了角色的深度和故事的魅力。情节紧凑，情感丰富，为整部剧增添了浓墨重彩的一笔。")
 
-    def get_analysis_cache_path(self, srt_file: str) -> str:
-        """获取分析结果缓存路径"""
-        file_hash = self.get_file_hash(os.path.join(self.srt_folder, srt_file)) # fix
-        episode_num = self._extract_episode_number(srt_file)
-        return os.path.join(self.analysis_cache_folder, f"analysis_E{episode_num}_{file_hash}.json")
+    def _generate_content_highlights(self, plot_type: str, genre: str) -> List[str]:
+        """生成内容亮点"""
+        highlights_map = {
+            '关键冲突': [
+                f"{genre}中的经典对抗场面",
+                "针锋相对的精彩交锋",
+                "矛盾冲突的集中爆发",
+                "观点碰撞的激烈时刻"
+            ],
+            '线索揭露': [
+                "关键信息的重要披露",
+                "推理逻辑的精彩展示",
+                "真相大白的震撼时刻",
+                "悬念解开的精彩设计"
+            ],
+            '情感爆发': [
+                "真实情感的深度表达",
+                "角色内心的完美诠释",
+                "情感共鸣的强烈时刻",
+                "人性光辉的生动展现"
+            ],
+            '人物转折': [
+                "角色成长的关键节点",
+                "人生选择的重要时刻",
+                "性格转变的精彩刻画",
+                "命运转折的深度表现"
+            ],
+            '重要对话': [
+                "深度对话的智慧碰撞",
+                "台词功底的精彩展现",
+                "情感表达的细腻刻画",
+                "思想交流的深度体现"
+            ],
+            '主题升华': [
+                f"{genre}深层主题的完美体现",
+                "价值观念的深度表达",
+                "人生哲理的智慧分享",
+                "精神层面的深度思考"
+            ]
+        }
+        
+        return highlights_map.get(plot_type, ["精彩剧情片段", "角色深度刻画", "情节紧凑发展", "情感真实表达"])
 
-    def save_analysis_cache(self, srt_file: str, analysis_result: Dict):
-        """保存分析结果到缓存"""
-        cache_path = self.get_analysis_cache_path(srt_file)
-        try:
-            with open(cache_path, 'w', encoding='utf-8') as f:
-                json.dump(analysis_result, f, ensure_ascii=False, indent=2)
-            print(f"💾 分析结果已缓存: {os.path.basename(cache_path)}") #fix
-        except Exception as e:
-            print(f"⚠️ 缓存保存失败: {e}")
-
-    def load_analysis_cache(self, srt_file: str) -> Optional[Dict]:
-        """从缓存加载分析结果"""
-        cache_path = self.get_analysis_cache_path(srt_file)
-        if os.path.exists(cache_path):
-            try:
-                with open(cache_path, 'r', encoding='utf-8') as f:
-                    result = json.load(f)
-                print(f"💾 使用缓存的分析结果: {os.path.basename(cache_path)}") #fix
-                return result
-            except Exception as e:
-                print(f"⚠️ 缓存读取失败: {e}")
-        return None
+    def _generate_emotional_impact(self, plot_type: str) -> str:
+        """生成情感冲击描述"""
+        impact_map = {
+            '关键冲突': "激烈的对抗让观众血脉贲张，紧张的氛围令人屏息凝神，每一个回合都牵动着观众的心弦。",
+            '线索揭露': "真相揭晓的瞬间令人震撼不已，恍然大悟的感觉让观众拍案叫绝，推理的魅力展露无遗。",
+            '情感爆发': "真挚的情感表达直击心灵深处，观众不禁潸然泪下，共情的力量让整个场景升华。",
+            '人物转折': "角色的重要选择让观众为之动容，成长的足迹清晰可见，人性的光辉闪闪发光。",
+            '重要对话': "深度的对话引发思考共鸣，智慧的交流让观众受益匪浅，言语的力量震撼人心。",
+            '主题升华': "深层主题的表达引发哲学思考，精神层面的触动让观众意犹未尽，思想的深度令人赞叹。"
+        }
+        
+        return impact_map.get(plot_type, "精彩的剧情表现让观众深深沉浸其中，情感与理智的交融创造出难忘的观剧体验。")
 
     def find_video_file(self, srt_filename: str) -> Optional[str]:
         """查找对应的视频文件"""
         base_name = os.path.splitext(srt_filename)[0]
-        video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv']
+        video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.ts']
 
         # 精确匹配
         for ext in video_extensions:
@@ -900,10 +1337,18 @@ class IntelligentTVClipperSystem:
             if os.path.exists(video_path):
                 return video_path
 
+        # 集数匹配
+        episode_num = self._extract_episode_number(srt_filename)
+        for filename in os.listdir(self.videos_folder):
+            if any(filename.lower().endswith(ext) for ext in video_extensions):
+                video_episode = self._extract_episode_number(filename)
+                if episode_num == video_episode:
+                    return os.path.join(self.videos_folder, filename)
+
         # 模糊匹配
         for filename in os.listdir(self.videos_folder):
             if any(filename.lower().endswith(ext) for ext in video_extensions):
-                if base_name.lower() in filename.lower():
+                if base_name.lower() in filename.lower() or filename.lower() in base_name.lower():
                     return os.path.join(self.videos_folder, filename)
 
         return None
@@ -916,8 +1361,44 @@ class IntelligentTVClipperSystem:
         except:
             return False
 
-    def create_video_clips_stable(self, plot_points: List[Dict], video_file: str, srt_filename: str) -> List[str]: #fix
-        """创建视频片段"""
+    def get_clip_status_path(self, srt_file: str, plot_point: Dict) -> str:
+        """获取剪辑状态文件路径"""
+        episode_num = self._extract_episode_number(srt_file)
+        plot_type = plot_point.get('type', 'unknown')
+        title_hash = hashlib.md5(plot_point.get('title', '').encode()).hexdigest()[:8]
+        return os.path.join(self.clip_status_folder, f"E{episode_num}_{plot_type}_{title_hash}.json")
+
+    def is_clip_completed(self, srt_file: str, plot_point: Dict) -> bool:
+        """检查剪辑是否已完成"""
+        status_path = self.get_clip_status_path(srt_file, plot_point)
+        if os.path.exists(status_path):
+            try:
+                with open(status_path, 'r', encoding='utf-8') as f:
+                    status = json.load(f)
+                    output_path = status.get('output_path', '')
+                    return os.path.exists(output_path) and os.path.getsize(output_path) > 1024
+            except:
+                return False
+        return False
+
+    def mark_clip_completed(self, srt_file: str, plot_point: Dict, output_path: str):
+        """标记剪辑已完成"""
+        status_path = self.get_clip_status_path(srt_file, plot_point)
+        try:
+            status = {
+                'srt_file': srt_file,
+                'plot_point': plot_point,
+                'output_path': output_path,
+                'completed_time': datetime.now().isoformat(),
+                'file_size': os.path.getsize(output_path) if os.path.exists(output_path) else 0
+            }
+            with open(status_path, 'w', encoding='utf-8') as f:
+                json.dump(status, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"⚠️ 状态标记失败: {e}")
+
+    def create_video_clips_stable(self, plot_points: List[Dict], video_file: str, srt_filename: str) -> List[str]:
+        """创建视频片段 - 稳定版本"""
         if not self.check_ffmpeg():
             print("❌ 未找到FFmpeg，无法剪辑视频")
             return []
@@ -926,150 +1407,314 @@ class IntelligentTVClipperSystem:
         episode_num = self._extract_episode_number(srt_filename)
 
         for i, plot_point in enumerate(plot_points, 1):
-            plot_type = plot_point['plot_type']
-            safe_title = re.sub(r'[^\w\u4e00-\u9fff]', '_', f"E{episode_num}_{plot_type}_{i}")
+            # 检查是否已完成剪辑
+            if self.is_clip_completed(srt_filename, plot_point):
+                status_path = self.get_clip_status_path(srt_filename, plot_point)
+                try:
+                    with open(status_path, 'r', encoding='utf-8') as f:
+                        status = json.load(f)
+                        existing_path = status.get('output_path', '')
+                        if os.path.exists(existing_path):
+                            print(f"✅ 片段已存在: {os.path.basename(existing_path)}")
+                            created_clips.append(existing_path)
+                            continue
+                except:
+                    pass
+
+            plot_type = plot_point.get('type', '未知类型')
+            title = plot_point.get('title', f'第{episode_num}集片段{i}')
+            
+            # 生成安全的文件名
+            safe_title = re.sub(r'[^\w\u4e00-\u9fff\-_]', '_', title)
             clip_filename = f"{safe_title}.mp4"
             clip_path = os.path.join(self.clips_folder, clip_filename)
 
-            # 检查是否已存在
-            if os.path.exists(clip_path) and os.path.getsize(clip_path) > 1024:
-                print(f"✅ 片段已存在: {clip_filename}")
-                created_clips.append(clip_path)
+            print(f"\n🎬 剪辑片段 {i}: {title}")
+            print(f"   类型: {plot_type}")
+            
+            # 处理时间段
+            time_segments = plot_point.get('time_segments', [])
+            if not time_segments:
+                print(f"   ❌ 缺少时间段信息")
                 continue
 
             # 创建片段
-            if self._create_single_clip_stable(video_file, plot_point, clip_path): #fix
+            if self._create_video_from_segments(video_file, time_segments, clip_path, plot_point):
                 created_clips.append(clip_path)
-                self._create_clip_description(clip_path, plot_point, episode_num)
+                self.mark_clip_completed(srt_filename, plot_point, clip_path)
+                self._create_clip_description_advanced(clip_path, plot_point, episode_num)
+            else:
+                print(f"   ❌ 剪辑失败")
 
         return created_clips
 
-    def _create_single_clip_stable(self, video_file: str, plot_point: Dict, output_path: str, max_retries: int = 3) -> bool: #fix
-        """创建单个视频片段"""
-        for attempt in range(max_retries): #add
-            try: #add
-                start_time = plot_point['start_time']
-                end_time = plot_point['end_time']
+    def _create_video_from_segments(self, video_file: str, time_segments: List[Dict], output_path: str, plot_point: Dict, max_retries: int = 3) -> bool:
+        """从时间段创建视频 - 支持非连续片段"""
+        
+        for attempt in range(max_retries):
+            try:
+                if len(time_segments) == 1:
+                    # 单个连续片段
+                    segment = time_segments[0]
+                    start_time = segment['start_time']
+                    end_time = segment['end_time']
+                    
+                    start_seconds = self._time_to_seconds(start_time)
+                    end_seconds = self._time_to_seconds(end_time)
+                    duration = end_seconds - start_seconds
+                    
+                    print(f"   ⏱️ 时间: {start_time} --> {end_time} ({duration:.1f}秒)")
+                    
+                    if duration <= 0:
+                        print(f"   ❌ 无效时间段")
+                        return False
 
-                if attempt == 0: #add
-                    print(f"🎬 剪辑片段: {os.path.basename(output_path)}")
-                    print(f"   时间: {start_time} --> {end_time}")
-                    print(f"   类型: {plot_point['plot_type']}")
+                    # 添加小量缓冲
+                    buffer_start = max(0, start_seconds - 0.5)
+                    buffer_duration = duration + 1
 
-                start_seconds = self._time_to_seconds(start_time)
-                end_seconds = self._time_to_seconds(end_time)
-                duration = end_seconds - start_seconds
+                    cmd = [
+                        'ffmpeg',
+                        '-i', video_file,
+                        '-ss', str(buffer_start),
+                        '-t', str(buffer_duration),
+                        '-c:v', 'libx264',
+                        '-c:a', 'aac',
+                        '-preset', 'medium',
+                        '-crf', '23',
+                        '-avoid_negative_ts', 'make_zero',
+                        '-movflags', '+faststart',
+                        output_path,
+                        '-y'
+                    ]
+                else:
+                    # 多个片段合并
+                    print(f"   📝 合并 {len(time_segments)} 个片段")
+                    
+                    # 创建临时片段文件
+                    temp_files = []
+                    temp_list_file = output_path.replace('.mp4', '_segments.txt')
+                    
+                    for j, segment in enumerate(time_segments):
+                        start_seconds = self._time_to_seconds(segment['start_time'])
+                        end_seconds = self._time_to_seconds(segment['end_time'])
+                        duration = end_seconds - start_seconds
+                        
+                        if duration <= 0:
+                            continue
+                            
+                        temp_file = output_path.replace('.mp4', f'_temp_{j}.mp4')
+                        temp_files.append(temp_file)
+                        
+                        # 创建临时片段
+                        temp_cmd = [
+                            'ffmpeg',
+                            '-i', video_file,
+                            '-ss', str(start_seconds),
+                            '-t', str(duration),
+                            '-c:v', 'libx264',
+                            '-c:a', 'aac',
+                            '-preset', 'medium',
+                            '-crf', '23',
+                            temp_file,
+                            '-y'
+                        ]
+                        
+                        result = subprocess.run(temp_cmd, capture_output=True, text=True, timeout=180)
+                        if result.returncode != 0:
+                            print(f"   ⚠️ 临时片段 {j+1} 创建失败")
+                            # 清理临时文件
+                            for tf in temp_files:
+                                if os.path.exists(tf):
+                                    os.remove(tf)
+                            return False
+                    
+                    if not temp_files:
+                        print(f"   ❌ 没有有效的片段")
+                        return False
+                    
+                    # 创建合并列表文件
+                    with open(temp_list_file, 'w', encoding='utf-8') as f:
+                        for temp_file in temp_files:
+                            f.write(f"file '{temp_file}'\n")
+                    
+                    # 合并片段
+                    cmd = [
+                        'ffmpeg',
+                        '-f', 'concat',
+                        '-safe', '0',
+                        '-i', temp_list_file,
+                        '-c', 'copy',
+                        output_path,
+                        '-y'
+                    ]
 
-                if duration <= 0:
-                    print(f"   ❌ 无效时间段: 开始{start_seconds:.1f}s >= 结束{end_seconds:.1f}s")
-                    return False
+                # 执行命令
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
-                if duration < 30:
-                    print(f"   ❌ 时长过短: {duration:.1f}秒")
-                    return False
-
-                # 添加小量缓冲时间
-                buffer_start = max(0, start_seconds - 1)
-                buffer_duration = duration + 2
-
-                # FFmpeg命令
-                cmd = [
-                    'ffmpeg',
-                    '-i', video_file,
-                    '-ss', str(buffer_start),
-                    '-t', str(buffer_duration),
-                    '-c:v', 'libx264',
-                    '-c:a', 'aac',
-                    '-preset', 'medium',
-                    '-crf', '23',
-                    '-avoid_negative_ts', 'make_zero', #add
-                    '-movflags', '+faststart', #add
-                    output_path,
-                    '-y'
-                ]
-
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-
-                if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1024: #fix
-                    file_size = os.path.getsize(output_path) / (1024*1024) #fix
-                    print(f"   ✅ 成功: {file_size:.1f}MB (实际时长: {duration:.1f}秒)") #fix
+                if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1024:
+                    file_size = os.path.getsize(output_path) / (1024*1024)
+                    total_duration = plot_point.get('total_duration', 0)
+                    print(f"   ✅ 成功: {os.path.basename(output_path)} ({file_size:.1f}MB, {total_duration:.1f}秒)")
+                    
+                    # 清理临时文件
+                    if len(time_segments) > 1:
+                        for temp_file in temp_files:
+                            if os.path.exists(temp_file):
+                                os.remove(temp_file)
+                        if os.path.exists(temp_list_file):
+                            os.remove(temp_list_file)
+                    
                     return True
                 else:
                     error_msg = result.stderr[:200] if result.stderr else '未知错误'
-                    print(f"   ❌ 尝试{attempt+1}失败: {error_msg}")
-                    # 清理失败的文件 #add
-                    if os.path.exists(output_path): #add
-                        os.remove(output_path) #add
+                    print(f"   ❌ 尝试 {attempt+1} 失败: {error_msg}")
+                    
+                    # 清理失败文件
+                    if os.path.exists(output_path):
+                        os.remove(output_path)
+                    
+                    if len(time_segments) > 1:
+                        for temp_file in temp_files:
+                            if os.path.exists(temp_file):
+                                os.remove(temp_file)
+                        if os.path.exists(temp_list_file):
+                            os.remove(temp_list_file)
 
-            except subprocess.TimeoutExpired: #add
-                print(f"   ❌ 尝试{attempt+1}超时")
-                if os.path.exists(output_path): #add
-                    os.remove(output_path) #add
-            except Exception as e: #add
-                print(f"   ❌ 尝试{attempt+1}异常: {e}")
-                if os.path.exists(output_path): #add
-                    os.remove(output_path) #add
+            except subprocess.TimeoutExpired:
+                print(f"   ❌ 尝试 {attempt+1} 超时")
+            except Exception as e:
+                print(f"   ❌ 尝试 {attempt+1} 异常: {e}")
+            
+            # 重试前等待
+            if attempt < max_retries - 1:
+                time.sleep(1)
 
-        print(f"   ❌ 所有重试失败") #add
+        print(f"   ❌ 所有重试失败")
         return False
 
-    def _create_clip_description(self, video_path: str, plot_point: Dict, episode_num: str):
-        """创建片段描述文件"""
+    def _create_clip_description_advanced(self, video_path: str, plot_point: Dict, episode_num: str):
+        """创建高级片段描述文件"""
         try:
-            desc_path = video_path.replace('.mp4', '_片段说明.txt')
+            desc_path = video_path.replace('.mp4', '_完整说明.txt')
 
-            content = f"""📺 电视剧短视频片段说明文档
-{"=" * 60}
+            content = f"""📺 {plot_point.get('title', '精彩片段')}
+{"=" * 80}
 
 【基本信息】
 集数编号：第{episode_num}集
-片段类型：{plot_point['plot_type']}
-片段标题：{plot_point['title']}
+片段类型：{plot_point.get('type', '未知类型')}
+总时长：{plot_point.get('total_duration', 0):.1f} 秒
 
-【时间信息】
-开始时间：{plot_point['start_time']}
-结束时间：{plot_point['end_time']}
-片段时长：{plot_point['duration']:.1f} 秒
+【时间段信息】"""
 
-【剧情分析】
-剧情意义：{plot_point['plot_significance']}
-内容摘要：{plot_point['content_summary']}
-
-【内容亮点】
-"""
-            for highlight in plot_point['content_highlights']:
-                content += f"• {highlight}\n"
+            for i, segment in enumerate(plot_point.get('time_segments', []), 1):
+                content += f"""
+片段 {i}：{segment.get('start_time')} --> {segment.get('end_time')}
+选择原因：{segment.get('reason', '核心片段')}"""
 
             content += f"""
+
+【剧情分析】
+剧情意义：{plot_point.get('plot_significance', '推动剧情发展')}
+内容摘要：{plot_point.get('content_summary', '精彩片段内容')}
+情感冲击：{plot_point.get('emotional_impact', '深度情感表达')}
+
+【内容亮点】"""
+            for highlight in plot_point.get('content_highlights', []):
+                content += f"\n• {highlight}"
+
+            content += f"""
+
+【关键台词】"""
+            for dialogue in plot_point.get('key_dialogues', []):
+                content += f"\n{dialogue}"
+
+            content += f"""
+
 【第三人称旁白字幕】
-{plot_point['third_person_narration']}
+{plot_point.get('third_person_narration', '专业旁白解说')}
+
+【下集衔接】
+{plot_point.get('connection_setup', '为后续剧情发展做铺垫')}
 
 【技术说明】
-• 片段保证在完整句子处开始和结束
-• 自动修正了常见错别字
-• 第三人称旁白可直接用于视频制作
+• 支持非连续时间段的智能合并
+• 自动修正错别字，便于剪辑参考
+• 确保句子完整，不截断重要对话
+• 生成第三人称旁白，适合短视频制作
+• 保证剧情连贯性和跨集衔接
+
+【剪辑建议】
+• 严格按照标注时间进行剪辑
+• 可在开头添加简短背景介绍（5-10秒）
+• 结尾可添加下集预告提示（3-5秒）
+• 使用提供的第三人称旁白作为配音文本
+• 注意保持原声与旁白的平衡
 
 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
             with open(desc_path, 'w', encoding='utf-8') as f:
                 f.write(content)
-            print(f"   📝 说明文件: {os.path.basename(desc_path)}") # add
+            print(f"   📝 说明文件: {os.path.basename(desc_path)}")
 
         except Exception as e:
             print(f"   ⚠️ 说明文件生成失败: {e}")
 
-    def process_episode_stable(self, srt_filename: str) -> Optional[Dict]: #fix
-        """处理单集"""
+    def update_series_context(self, episode_num: str, analysis_result: Dict, plot_points: List[Dict]):
+        """更新全剧上下文"""
+        try:
+            # 添加到已处理集数
+            episode_summary = {
+                'episode': episode_num,
+                'summary': analysis_result.get('episode_summary', {}).get('core_storyline', f'第{episode_num}集剧情'),
+                'main_conflicts': analysis_result.get('episode_analysis', {}).get('main_conflicts', []),
+                'key_characters': analysis_result.get('episode_analysis', {}).get('key_characters', []),
+                'connection_hint': analysis_result.get('episode_summary', {}).get('next_episode_connection', '')
+            }
+            
+            self.series_context['previous_episodes'].append(episode_summary)
+            
+            # 更新主要故事线
+            for point in plot_points:
+                storyline = f"{point.get('type', '剧情发展')}: {point.get('title', '精彩片段')}"
+                if storyline not in self.series_context['main_storylines']:
+                    self.series_context['main_storylines'].append(storyline)
+            
+            # 更新持续冲突
+            main_conflicts = analysis_result.get('episode_analysis', {}).get('main_conflicts', [])
+            for conflict in main_conflicts:
+                if conflict not in self.series_context['ongoing_conflicts']:
+                    self.series_context['ongoing_conflicts'].append(conflict)
+            
+            # 只保留最近的上下文
+            if len(self.series_context['previous_episodes']) > 5:
+                self.series_context['previous_episodes'] = self.series_context['previous_episodes'][-5:]
+            
+            if len(self.series_context['main_storylines']) > 10:
+                self.series_context['main_storylines'] = self.series_context['main_storylines'][-10:]
+            
+            if len(self.series_context['ongoing_conflicts']) > 6:
+                self.series_context['ongoing_conflicts'] = self.series_context['ongoing_conflicts'][-6:]
+                
+        except Exception as e:
+            print(f"⚠️ 上下文更新失败: {e}")
+
+    def process_episode_complete(self, srt_filename: str) -> Optional[Dict]:
+        """处理单集 - 完整版"""
         print(f"\n📺 处理集数: {srt_filename}")
 
-        # 检查缓存
+        episode_num = self._extract_episode_number(srt_filename)
+
+        # 1. 检查分析缓存
         cached_analysis = self.load_analysis_cache(srt_filename)
         if cached_analysis:
-            plot_points = cached_analysis.get('plot_points', [])
-            episode_num = cached_analysis.get('episode_number', self._extract_episode_number(srt_filename))
+            print(f"💾 使用缓存的分析结果")
+            analysis_result = cached_analysis
+            plot_points = analysis_result.get('plot_points', [])
         else:
-            # 解析字幕
+            # 2. 解析字幕
             srt_path = os.path.join(self.srt_folder, srt_filename)
             subtitles = self.parse_srt_file(srt_path)
 
@@ -1077,51 +1722,60 @@ class IntelligentTVClipperSystem:
                 print(f"❌ 字幕解析失败")
                 return None
 
-            episode_num = self._extract_episode_number(srt_filename)
+            # 3. 识别剧情类型和主题
+            genre, themes = self.detect_genre_and_themes(subtitles)
 
-            # 构建该集的上下文
-            episode_context = self._build_episode_context(episode_num, subtitles)
+            # 4. 构建剧集上下文
+            series_context = self.build_series_context(episode_num)
+
+            # 5. AI分析优先，基础规则兜底
+            ai_analysis = self.ai_analyze_episode_complete(subtitles, episode_num, genre, themes, series_context)
             
-            # AI分析优先，基础规则兜底
-            ai_analysis = self.analyze_with_ai(subtitles, episode_num, episode_context)
             if ai_analysis and ai_analysis.get('plot_points'):
+                analysis_result = ai_analysis
                 plot_points = ai_analysis['plot_points']
-                print(f"🎯 AI识别到 {len(plot_points)} 个剧情点:")
-                for i, point in enumerate(plot_points, 1):
-                    plot_type = point.get('plot_type', '未知类型')
-                    title = point.get('title', '无标题')
-                    duration = point.get('duration', 0)
-                    print(f"    {i}. {plot_type}: {title} ({duration:.1f}秒)")
+                print(f"🤖 AI分析成功: {len(plot_points)} 个剧情点")
             else:
                 print("📝 AI分析失败，使用基础规则分析")
-                plot_points = self.analyze_plot_points_basic(subtitles, episode_num)
-                print(f"🎯 规则识别到 {len(plot_points)} 个剧情点:")
-                for i, point in enumerate(plot_points, 1):
-                    plot_type = point.get('plot_type', '未知类型')
-                    duration = point.get('duration', 0)
-                    print(f"    {i}. {plot_type} (时长: {duration:.1f}秒)")
+                plot_points = self.analyze_plot_points_basic(subtitles, episode_num, genre, themes)
+                
+                # 构建基础分析结果
+                analysis_result = {
+                    'episode_analysis': {
+                        'episode_number': episode_num,
+                        'genre': genre,
+                        'main_theme': f'第{episode_num}集主要内容',
+                        'story_progression': '剧情发展',
+                        'emotional_arc': '情感推进',
+                        'key_characters': ['主要角色'],
+                        'main_conflicts': ['核心冲突']
+                    },
+                    'plot_points': plot_points,
+                    'episode_summary': {
+                        'core_storyline': f'第{episode_num}集核心剧情',
+                        'character_development': '角色发展',
+                        'plot_advancement': '剧情推进',
+                        'cliffhanger_or_resolution': '悬念设置',
+                        'next_episode_connection': f'与第{int(episode_num)+1}集的衔接'
+                    }
+                }
 
             if not plot_points:
                 print(f"❌ 未找到合适的剧情点")
                 return None
 
-            print(f"🎯 识别到 {len(plot_points)} 个剧情点:") #add
-            for i, point in enumerate(plot_points, 1): #add
-                plot_type = point.get('plot_type', '未知类型') #add
-                duration = point.get('duration', 0) #add
-                score = point.get('score', 0) #add
-                print(f"    {i}. {plot_type} (时长: {duration:.1f}秒, 评分: {score:.1f})") #add
+            # 6. 保存分析结果到缓存
+            self.save_analysis_cache(srt_filename, analysis_result)
 
-            # 保存分析结果到缓存
-            episode_summary = {
-                'episode_number': episode_num,
-                'filename': srt_filename,
-                'plot_points': plot_points,
-                'analysis_timestamp': datetime.now().isoformat()
-            }
-            self.save_analysis_cache(srt_filename, episode_summary)
+        # 输出分析结果
+        print(f"🎯 识别到 {len(plot_points)} 个剧情点:")
+        for i, point in enumerate(plot_points, 1):
+            plot_type = point.get('type', '未知类型')
+            title = point.get('title', '无标题')
+            duration = point.get('total_duration', 0)
+            print(f"    {i}. {plot_type}: {title} ({duration:.1f}秒)")
 
-        # 查找视频文件
+        # 7. 查找视频文件
         video_file = self.find_video_file(srt_filename)
         if not video_file:
             print(f"❌ 未找到视频文件")
@@ -1129,172 +1783,316 @@ class IntelligentTVClipperSystem:
 
         print(f"📁 视频文件: {os.path.basename(video_file)}")
 
-        # 创建视频片段
-        created_clips = self.create_video_clips_stable(plot_points, video_file, srt_filename) #fix
+        # 8. 创建视频片段
+        created_clips = self.create_video_clips_stable(plot_points, video_file, srt_filename)
+
+        # 9. 更新全剧上下文
+        self.update_series_context(episode_num, analysis_result, plot_points)
 
         return {
             'episode_number': episode_num,
             'filename': srt_filename,
+            'analysis_result': analysis_result,
             'plot_points': plot_points,
             'created_clips': len(created_clips),
+            'clip_paths': created_clips,
             'processing_timestamp': datetime.now().isoformat()
         }
 
     def process_all_episodes(self):
-        """处理所有集数"""
-        print("\n🚀 开始智能剧情剪辑处理")
-        print("=" * 50)
+        """处理所有集数 - 主函数"""
+        print("\n🚀 开始完整智能剧情剪辑处理")
+        print("=" * 60)
 
         # 获取所有SRT文件并按名称排序
         srt_files = [f for f in os.listdir(self.srt_folder) 
-                     if f.endswith(('.srt', '.txt')) and not f.startswith('.')]
+                     if f.lower().endswith(('.srt', '.txt')) and not f.startswith('.')]
 
         if not srt_files:
             print(f"❌ {self.srt_folder}/ 目录中未找到字幕文件")
             return
 
-        # 按字符串排序（即按SRT文件名排序）
+        # 按字符串排序（文件名顺序）
         srt_files.sort()
 
         print(f"📝 找到 {len(srt_files)} 个字幕文件（按文件名排序）")
         for i, f in enumerate(srt_files, 1):
             print(f"   {i}. {f}")
 
+        print(f"\n🎬 视频目录: {self.videos_folder}")
+        print(f"📁 输出目录: {self.clips_folder}")
+        print(f"💾 缓存系统: 启用")
+
+        if self.ai_config.get('enabled'):
+            api_type = self.ai_config.get('api_type', '未知')
+            provider = self.ai_config.get('provider', '未知')
+            print(f"🤖 AI分析: 启用 ({api_type} - {provider})")
+        else:
+            print(f"📏 AI分析: 未启用，使用基础规则")
+
         # 处理每一集
         all_episodes = []
         total_clips = 0
+        success_count = 0
 
         for i, srt_file in enumerate(srt_files):
             try:
-                print(f"\n{'='*60}")
+                print(f"\n{'='*80}")
                 print(f"📺 处理第 {i+1}/{len(srt_files)} 集: {srt_file}")
-                print(f"{'='*60}")
+                print(f"{'='*80}")
 
-                episode_summary = self.process_episode_stable(srt_file) #fix
+                episode_summary = self.process_episode_complete(srt_file)
                 if episode_summary:
                     all_episodes.append(episode_summary)
                     total_clips += episode_summary['created_clips']
+                    success_count += 1
+                    print(f"✅ 第{i+1}集处理成功: {episode_summary['created_clips']} 个片段")
+                else:
+                    print(f"❌ 第{i+1}集处理失败")
 
             except Exception as e:
                 print(f"❌ 处理 {srt_file} 出错: {e}")
 
         # 生成最终报告
-        self._create_final_report(all_episodes, total_clips)
+        self._create_comprehensive_report(all_episodes, total_clips, len(srt_files))
 
-        print(f"\n📊 处理完成:")
-        print(f"✅ 成功处理: {len(all_episodes)}/{len(srt_files)} 集")
+        print(f"\n{'='*80}")
+        print(f"📊 完整处理统计:")
+        print(f"✅ 成功处理: {success_count}/{len(srt_files)} 集")
         print(f"🎬 生成片段: {total_clips} 个")
         print(f"📁 输出目录: {self.clips_folder}/")
+        print(f"📄 详细报告: {os.path.join(self.reports_folder, '完整智能剪辑报告.txt')}")
+        print(f"💾 缓存文件: {len(os.listdir(self.analysis_cache_folder))} 个")
+        print(f"🎯 剪辑状态: {len(os.listdir(self.clip_status_folder))} 个")
+        print("🎉 智能剪辑系统处理完成！")
 
-    def _create_final_report(self, episodes: List[Dict], total_clips: int):
-        """创建最终报告"""
+    def _create_comprehensive_report(self, episodes: List[Dict], total_clips: int, total_episodes: int):
+        """创建综合报告"""
         if not episodes:
             return
 
-        report_path = os.path.join(self.reports_folder, "智能剪辑报告.txt")
+        report_path = os.path.join(self.reports_folder, "完整智能剪辑报告.txt")
 
-        content = f"""📺 智能电视剧剪辑系统报告
-{"=" * 80}
+        content = f"""📺 完整智能电视剧剪辑系统报告
+{"=" * 100}
 
 📊 处理统计：
-• 总集数: {len(episodes)} 集
+• 总集数: {total_episodes} 集
+• 成功处理: {len(episodes)} 集
+• 成功率: {len(episodes)/total_episodes*100:.1f}%
 • 生成片段: {total_clips} 个
 • 平均每集片段: {total_clips/len(episodes):.1f} 个
-• AI分析状态: {'已启用' if self.ai_config.get('enabled') else '基础规则分析'}
 
-📺 分集详细信息：
-{"=" * 60}
+🤖 系统配置：
+• AI分析状态: {'已启用' if self.ai_config.get('enabled') else '基础规则分析'}
+• 缓存机制: 启用 (避免重复分析和剪辑)
+• 一致性保证: 启用 (多次执行结果一致)
+• 错别字修正: 启用
+
+🎭 剧情类型分析：
+• 检测类型: {self.series_context.get('genre_detected', '未检测')}
+• 主要主题: {', '.join(self.series_context.get('main_themes', []))}
+
+📈 剧情点类型分布：
 """
 
+        # 统计剧情点类型
+        plot_type_stats = {}
+        total_duration = 0
+        
         for episode in episodes:
+            for plot_point in episode.get('plot_points', []):
+                plot_type = plot_point.get('type', '未知类型')
+                plot_type_stats[plot_type] = plot_type_stats.get(plot_type, 0) + 1
+                total_duration += plot_point.get('total_duration', 0)
+
+        for plot_type, count in sorted(plot_type_stats.items(), key=lambda x: x[1], reverse=True):
+            percentage = (count / sum(plot_type_stats.values())) * 100
+            content += f"• {plot_type}: {count} 个 ({percentage:.1f}%)\n"
+
+        avg_duration = total_duration / sum(plot_type_stats.values()) if plot_type_stats else 0
+
+        content += f"""
+📏 时长统计：
+• 总时长: {total_duration:.1f} 秒 ({total_duration/60:.1f} 分钟)
+• 平均片段时长: {avg_duration:.1f} 秒 ({avg_duration/60:.1f} 分钟)
+
+🔗 跨集连贯性：
+• 上下文管理: 启用
+• 前情回顾: 自动生成
+• 衔接点分析: 智能识别
+• 故事线追踪: 完整保持
+
+📝 详细分集信息：
+{"=" * 100}
+"""
+
+        # 详细分集信息
+        for i, episode in enumerate(episodes, 1):
+            analysis = episode.get('analysis_result', {})
+            episode_analysis = analysis.get('episode_analysis', {})
+            episode_summary = analysis.get('episode_summary', {})
+            
             content += f"""
 【第{episode['episode_number']}集】{episode['filename']}
-生成片段：{episode['created_clips']} 个
-处理时间：{episode.get('processing_timestamp', '未知')}
+────────────────────────────────────────────────────────────────
+剧情类型：{episode_analysis.get('genre', '未知')}
+核心主题：{episode_analysis.get('main_theme', '主要内容')}
+故事进展：{episode_analysis.get('story_progression', '剧情发展')}
+情感发展：{episode_analysis.get('emotional_arc', '情感推进')}
+主要角色：{', '.join(episode_analysis.get('key_characters', []))}
+核心冲突：{', '.join(episode_analysis.get('main_conflicts', []))}
 
+生成片段：{episode['created_clips']} 个
 剧情点详情：
 """
-            for i, plot_point in enumerate(episode['plot_points'], 1):
-                plot_type = plot_point.get('plot_type', '未知类型')
-                title = plot_point.get('title', '无标题')
-                start_time = plot_point.get('start_time', '00:00:00,000')
-                end_time = plot_point.get('end_time', '00:00:00,000')
-                duration = plot_point.get('duration', 0)
-
-                content += f"""  {i}. {plot_type} - {title}
-     时间：{start_time} --> {end_time} ({duration:.1f}秒)
+            
+            for j, plot_point in enumerate(episode.get('plot_points', []), 1):
+                time_segments = plot_point.get('time_segments', [])
+                time_info = ""
+                if len(time_segments) == 1:
+                    seg = time_segments[0]
+                    time_info = f"{seg.get('start_time')} --> {seg.get('end_time')}"
+                else:
+                    time_info = f"{len(time_segments)} 个片段合并"
+                
+                content += f"""  {j}. {plot_point.get('type', '未知类型')} - {plot_point.get('title', '无标题')}
+     时间：{time_info} (总时长: {plot_point.get('total_duration', 0):.1f}秒)
+     意义：{plot_point.get('plot_significance', '剧情推进')[:60]}...
+     旁白：{plot_point.get('third_person_narration', '专业解说')[:60]}...
 """
 
-            content += f"""{"─" * 60}
+            content += f"""
+下集衔接：{episode_summary.get('next_episode_connection', '自然过渡')}
 """
 
         content += f"""
+
+💡 使用说明：
+• 所有视频片段已保存在 {self.clips_folder}/ 目录
+• 每个片段都有对应的详细说明文档
+• 支持非连续时间段的智能合并剪辑
+• 第三人称旁白可直接用于配音制作
+• 错别字已自动修正，便于剪辑参考
+• 缓存系统确保重复执行的一致性
+
+🔧 技术特性：
+• 智能剧情类型识别
+• AI驱动的剧情点分析
+• 完整句子边界保证
+• 跨集连贯性管理
+• 稳定的缓存机制
+• 断点续传支持
+• 多重重试机制
+
 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+系统版本：完整智能电视剧剪辑系统 v2.0
 """
 
         try:
             with open(report_path, 'w', encoding='utf-8') as f:
                 f.write(content)
-            print(f"📄 详细报告已保存: {report_path}")
+            print(f"📄 综合报告已保存: {report_path}")
         except Exception as e:
             print(f"⚠️ 报告保存失败: {e}")
 
     def show_file_status(self):
         """显示文件状态"""
-        srt_files = [f for f in os.listdir(self.srt_folder) if f.endswith(('.srt', '.txt'))]
-        video_files = [f for f in os.listdir(self.videos_folder) if f.endswith(('.mp4', '.mkv', '.avi'))]
+        srt_files = [f for f in os.listdir(self.srt_folder) if f.lower().endswith(('.srt', '.txt'))]
+        video_files = [f for f in os.listdir(self.videos_folder) if f.lower().endswith(('.mp4', '.mkv', '.avi', '.mov', '.wmv'))]
         output_files = [f for f in os.listdir(self.clips_folder) if f.endswith('.mp4')]
+        cache_files = os.listdir(self.analysis_cache_folder)
+        status_files = os.listdir(self.clip_status_folder)
 
-        print(f"\n📊 文件状态:")
+        print(f"\n📊 文件状态详情:")
         print(f"📝 字幕文件: {len(srt_files)} 个")
         if srt_files:
-            srt_files.sort()  # 按名称排序显示
+            srt_files.sort()
             for i, f in enumerate(srt_files[:5], 1):
                 print(f"   {i}. {f}")
             if len(srt_files) > 5:
                 print(f"   ... 还有 {len(srt_files)-5} 个文件")
 
         print(f"🎬 视频文件: {len(video_files)} 个")
+        if video_files:
+            for i, f in enumerate(video_files[:3], 1):
+                print(f"   {i}. {f}")
+            if len(video_files) > 3:
+                print(f"   ... 还有 {len(video_files)-3} 个文件")
+
         print(f"📤 输出视频: {len(output_files)} 个")
+        print(f"💾 分析缓存: {len(cache_files)} 个")
+        print(f"🎯 剪辑状态: {len(status_files)} 个")
 
-    def show_usage_guide(self): #add
-        """显示使用教程""" #add
-        print("\n📖 使用教程") #add
-        print("=" * 50) #add
-        print(""" #add
-🎯 快速开始: #add
-1. 将字幕文件(.srt/.txt)放在 srt/ 目录 #add
-2. 将对应视频文件(.mp4/.mkv/.avi)放在 videos/ 目录 #add
-3. 可选：配置AI接口 (推荐但非必需) #add
-4. 运行智能剪辑 #add
+        # 匹配状态
+        matched_pairs = 0
+        for srt_file in srt_files:
+            if self.find_video_file(srt_file):
+                matched_pairs += 1
 
-📁 目录结构: #add
-项目根目录/ #add
-├── srt/ #add
-│ ├── EP01.srt #add
-│ └── EP02.srt #add
-├── videos/ #add
-│ ├── EP01.mp4 #add
-│ └── EP02.mp4 #add
-└── clips/ #add
-# 输出目录 (自动创建) #add
+        print(f"\n📋 匹配状态:")
+        print(f"✅ 字幕-视频配对: {matched_pairs}/{len(srt_files)}")
+        print(f"🎯 准备就绪: {'是' if matched_pairs > 0 else '否'}")
 
-💡 使用技巧: #add
-字幕文件名决定集数顺序 (按字符串排序) #add
-确保视频和字幕文件名对应 #add
-每集生成3-5个2-3分钟的精彩片段 #add
-AI可选：有AI更好，无AI也能工作 #add
-""") #add
-        input("\n按回车键返回主菜单...") #add
+    def show_usage_guide(self):
+        """显示使用教程"""
+        print("\n📖 完整使用教程")
+        print("=" * 60)
+        print("""
+🎯 系统特点:
+• 支持各种电视剧类型（法律剧、爱情剧、悬疑剧等）
+• 智能识别剧情点（冲突、转折、揭露、情感爧发等）
+• 支持非连续时间段的合并剪辑
+• 自动生成第三人称旁白字幕
+• 跨集连贯性保证和衔接点分析
+• 完整的缓存机制，避免重复处理
+
+📁 目录结构:
+项目根目录/
+├── srt/              # 字幕文件目录
+│   ├── E01.srt       # 第1集字幕
+│   ├── E02.srt       # 第2集字幕
+│   └── ...
+├── videos/           # 视频文件目录
+│   ├── E01.mp4       # 第1集视频
+│   ├── E02.mp4       # 第2集视频
+│   └── ...
+├── clips/            # 输出剪辑目录（自动创建）
+├── analysis_cache/   # 分析缓存目录（自动创建）
+├── clip_status/      # 剪辑状态目录（自动创建）
+└── reports/          # 报告目录（自动创建）
+
+🚀 使用步骤:
+1. 将字幕文件放入 srt/ 目录
+2. 将对应视频文件放入 videos/ 目录
+3. 可选：配置AI接口（推荐）
+4. 运行智能剪辑
+5. 在 clips/ 目录查看结果
+
+💡 高级特性:
+• 文件名匹配：支持多种命名格式
+• 错别字修正：防衛→防卫，正當→正当
+• 完整句子：确保不截断对话
+• 智能合并：支持非连续片段合并
+• 缓存机制：避免重复API调用
+• 状态管理：断点续传，多次执行一致
+
+🎬 输出内容:
+• 精彩短视频片段（2-3分钟）
+• 详细说明文档（含旁白文本）
+• 综合分析报告
+• 跨集衔接说明
+""")
+        input("\n按回车键返回主菜单...")
 
     def show_main_menu(self):
         """主菜单"""
         while True:
-            print("\n" + "=" * 60)
-            print("🎬 智能电视剧剪辑系统")
-            print("=" * 60)
+            print("\n" + "=" * 80)
+            print("🎬 完整智能电视剧剪辑系统")
+            print("=" * 80)
 
-            # 显示AI状态
+            # 显示系统状态
             if self.ai_config.get('enabled'):
                 api_type = self.ai_config.get('api_type', '未知')
                 provider = self.ai_config.get('provider', '未知')
@@ -1305,11 +2103,16 @@ AI可选：有AI更好，无AI也能工作 #add
             print(f"AI状态: {ai_status}")
 
             # 文件状态
-            srt_count = len([f for f in os.listdir(self.srt_folder) if f.endswith(('.srt', '.txt'))])
-            video_count = len([f for f in os.listdir(self.videos_folder) if f.endswith(('.mp4', '.mkv', '.avi'))])
+            srt_count = len([f for f in os.listdir(self.srt_folder) if f.lower().endswith(('.srt', '.txt'))])
+            video_count = len([f for f in os.listdir(self.videos_folder) if f.lower().endswith(('.mp4', '.mkv', '.avi', '.mov', '.wmv'))])
             clips_count = len([f for f in os.listdir(self.clips_folder) if f.endswith('.mp4')])
+            cache_count = len(os.listdir(self.analysis_cache_folder))
 
-            print(f"文件状态: 📝{srt_count}个字幕 🎬{video_count}个视频 📤{clips_count}个片段")
+            print(f"文件状态: 📝{srt_count}个字幕 🎬{video_count}个视频 📤{clips_count}个片段 💾{cache_count}个缓存")
+
+            print(f"剧情类型: {self.series_context.get('genre_detected', '未检测')}")
+            if self.series_context.get('main_themes'):
+                print(f"主要主题: {', '.join(self.series_context['main_themes'])}")
 
             print("\n🎯 主要功能:")
             print("1. 🤖 配置AI接口")
@@ -1317,14 +2120,15 @@ AI可选：有AI更好，无AI也能工作 #add
             print("3. 📁 查看文件状态")
             if self.ai_config.get('enabled'):
                 print("4. 🔍 测试AI连接")
-                print("5. 📖 查看使用教程") #add
+                print("5. 📖 查看使用教程")
                 print("0. ❌ 退出系统")
+                max_choice = "5"
             else:
-                print("4. 📖 查看使用教程") #add
+                print("4. 📖 查看使用教程")
                 print("0. ❌ 退出系统")
+                max_choice = "4"
 
             try:
-                max_choice = "5" if self.ai_config.get('enabled') else "4" #fix
                 choice = input(f"\n请选择操作 (0-{max_choice}): ").strip()
 
                 if choice == '1':
@@ -1332,22 +2136,31 @@ AI可选：有AI更好，无AI也能工作 #add
                 elif choice == '2':
                     if srt_count == 0:
                         print("\n⚠️ 请先将字幕文件放入 srt/ 目录")
+                        input("按回车键继续...")
                         continue
                     if video_count == 0:
                         print("\n⚠️ 请先将视频文件放入 videos/ 目录")
+                        input("按回车键继续...")
                         continue
 
+                    print("\n🚀 即将开始智能剪辑处理...")
+                    print("💡 提示：处理过程中可以随时按 Ctrl+C 安全中断")
+                    input("按回车键开始...")
+                    
                     self.process_all_episodes()
+                    input("\n按回车键返回主菜单...")
+                    
                 elif choice == '3':
                     self.show_file_status()
+                    input("\n按回车键返回...")
                 elif choice == '4' and self.ai_config.get('enabled'):
                     self.test_current_connection()
-                elif choice == '4' and not self.ai_config.get('enabled'): #add
-                    self.show_usage_guide() #add
-                elif choice == '5' and self.ai_config.get('enabled'): #add
-                    self.show_usage_guide() #add
+                elif choice == '4' and not self.ai_config.get('enabled'):
+                    self.show_usage_guide()
+                elif choice == '5' and self.ai_config.get('enabled'):
+                    self.show_usage_guide()
                 elif choice == '0':
-                    print("\n👋 感谢使用智能电视剧剪辑系统！")
+                    print("\n👋 感谢使用完整智能电视剧剪辑系统！")
                     break
                 else:
                     print(f"❌ 无效选择，请输入0-{max_choice}")
@@ -1355,16 +2168,20 @@ AI可选：有AI更好，无AI也能工作 #add
             except KeyboardInterrupt:
                 print("\n\n👋 用户中断，程序退出")
                 break
-            except Exception as e: # add
-                print(f"❌ 操作错误: {e}") # add
-                input("按回车键继续...") # add
+            except Exception as e:
+                print(f"❌ 操作错误: {e}")
+                input("按回车键继续...")
 
 def main():
     """主函数"""
-    print("🎬 智能电视剧剪辑系统")
-    print("=" * 60)
+    print("🎬 完整智能电视剧剪辑系统")
+    print("=" * 80)
+    print("🎯 支持15个核心功能需求的完整解决方案")
+    print("✨ 智能剧情分析 | 🎬 自动视频剪辑 | 📝 第三人称旁白")
+    print("🔗 跨集连贯性 | 💾 稳定缓存 | ⚡ 一致性保证")
+    print("=" * 80)
 
-    clipper = IntelligentTVClipperSystem()
+    clipper = CompleteIntelligentTVClipper()
     clipper.show_main_menu()
 
 if __name__ == "__main__":
