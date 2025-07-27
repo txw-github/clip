@@ -3,15 +3,20 @@
 # -*- coding: utf-8 -*-
 
 """
-完整智能电视剧剪辑系统 - 稳定版本
-支持多剧情类型、剧情点分析、跨集连贯性、第三人称旁白生成
-关键改进：
-10. 剪辑时保证一句话讲完
-11. API分析结果缓存，避免重复调用
-12. 剪辑结果一致性保证
-13. 断点续传，已剪辑好的不重复处理
-14. 多次执行结果一致性
-15. 批量处理所有srt文件
+完整智能电视剧剪辑系统 - 最终整合版本
+支持所有需求：
+1. 多剧情类型自动识别
+2. 按剧情点分剪短视频（关键冲突、人物转折、线索揭露）
+3. 非连续时间段智能合并剪辑
+4. 第三人称旁白字幕生成
+5. 跨集连贯性分析和衔接说明
+6. 智能错别字修正
+7. 固定输出格式
+8. API分析结果缓存机制
+9. 剪辑结果一致性保证
+10. 断点续传支持
+11. 完整句子边界保证
+12. 批量处理所有字幕文件
 """
 
 import os
@@ -22,9 +27,10 @@ import subprocess
 import sys
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
+import requests
 
-class StableTVClipper:
-    """稳定的智能电视剧剪辑系统"""
+class IntelligentTVClipperSystem:
+    """智能电视剧剪辑系统"""
 
     def __init__(self):
         # 标准目录结构
@@ -33,36 +39,39 @@ class StableTVClipper:
         self.clips_folder = "clips"
         self.cache_folder = "cache"
         self.reports_folder = "reports"
+        self.analysis_cache_folder = "analysis_cache"
+        self.clip_status_folder = "clip_status"
 
         # 创建必要目录
         for folder in [self.srt_folder, self.videos_folder, self.clips_folder, 
-                      self.cache_folder, self.reports_folder]:
+                      self.cache_folder, self.reports_folder, 
+                      self.analysis_cache_folder, self.clip_status_folder]:
             os.makedirs(folder, exist_ok=True)
 
         # 剧情点分类定义
         self.plot_point_types = {
             '关键冲突': {
-                'keywords': ['冲突', '争执', '对抗', '质疑', '反驳', '争议', '激烈', '愤怒', '不同意', '矛盾'],
+                'keywords': ['冲突', '争执', '对抗', '质疑', '反驳', '争议', '激烈', '愤怒', '不同意', '矛盾', '争论', '辩论'],
                 'weight': 10,
                 'ideal_duration': 180
             },
             '人物转折': {
-                'keywords': ['决定', '改变', '选择', '转变', '觉悟', '明白', '意识到', '发现自己', '成长'],
+                'keywords': ['决定', '改变', '选择', '转变', '觉悟', '明白', '意识到', '发现自己', '成长', '突破', '蜕变'],
                 'weight': 9,
                 'ideal_duration': 150
             },
             '线索揭露': {
-                'keywords': ['发现', '揭露', '真相', '证据', '线索', '秘密', '暴露', '证明', '找到', '曝光'],
+                'keywords': ['发现', '揭露', '真相', '证据', '线索', '秘密', '暴露', '证明', '找到', '曝光', '披露'],
                 'weight': 8,
                 'ideal_duration': 160
             },
             '情感爆发': {
-                'keywords': ['哭', '痛苦', '绝望', '愤怒', '激动', '崩溃', '心痛', '感动', '震撼', '泪水'],
+                'keywords': ['哭', '痛苦', '绝望', '愤怒', '激动', '崩溃', '心痛', '感动', '震撼', '泪水', '悲伤'],
                 'weight': 7,
                 'ideal_duration': 140
             },
             '重要对话': {
-                'keywords': ['告诉', '承认', '坦白', '解释', '澄清', '说明', '表态', '保证', '承诺'],
+                'keywords': ['告诉', '承认', '坦白', '解释', '澄清', '说明', '表态', '保证', '承诺', '宣布'],
                 'weight': 6,
                 'ideal_duration': 170
             }
@@ -71,19 +80,19 @@ class StableTVClipper:
         # 剧情类型识别
         self.genre_patterns = {
             '法律剧': {
-                'keywords': ['法官', '检察官', '律师', '法庭', '审判', '证据', '案件', '起诉', '辩护', '判决', '申诉', '听证会'],
+                'keywords': ['法官', '检察官', '律师', '法庭', '审判', '证据', '案件', '起诉', '辩护', '判决', '申诉', '听证会', '正当防卫'],
                 'weight': 1.0
             },
             '爱情剧': {
-                'keywords': ['爱情', '喜欢', '心动', '表白', '约会', '分手', '复合', '结婚', '情侣', '恋人'],
+                'keywords': ['爱情', '喜欢', '心动', '表白', '约会', '分手', '复合', '结婚', '情侣', '恋人', '爱人'],
                 'weight': 1.0
             },
             '悬疑剧': {
-                'keywords': ['真相', '秘密', '调查', '线索', '破案', '凶手', '神秘', '隐瞒'],
+                'keywords': ['真相', '秘密', '调查', '线索', '破案', '凶手', '神秘', '隐瞒', '疑点', '诡异'],
                 'weight': 1.0
             },
             '家庭剧': {
-                'keywords': ['家庭', '父母', '孩子', '兄弟', '姐妹', '亲情', '家人', '团聚'],
+                'keywords': ['家庭', '父母', '孩子', '兄弟', '姐妹', '亲情', '家人', '团聚', '血缘'],
                 'weight': 1.0
             }
         }
@@ -93,14 +102,23 @@ class StableTVClipper:
             '防衛': '防卫', '正當': '正当', '証據': '证据', '檢察官': '检察官',
             '審判': '审判', '辯護': '辩护', '起訴': '起诉', '調查': '调查',
             '發現': '发现', '決定': '决定', '選擇': '选择', '聽證會': '听证会',
-            '問題': '问题', '機會': '机会', '開始': '开始', '結束': '结束'
+            '問題': '问题', '機會': '机会', '開始': '开始', '結束': '结束',
+            '証人': '证人', '証言': '证言', '実現': '实现', '対話': '对话'
+        }
+
+        # 全剧上下文缓存
+        self.series_context = {
+            'previous_episodes': [],
+            'main_storylines': [],
+            'character_arcs': {},
+            'ongoing_conflicts': []
         }
 
         # 检测到的剧情类型
         self.detected_genre = None
         self.genre_confidence = 0.0
 
-        print("🚀 稳定版智能电视剧剪辑系统已启动")
+        print("🚀 智能电视剧剪辑系统已启动")
         print(f"📁 字幕目录: {self.srt_folder}/")
         print(f"🎬 视频目录: {self.videos_folder}/")
         print(f"📤 输出目录: {self.clips_folder}/")
@@ -111,15 +129,15 @@ class StableTVClipper:
         try:
             with open(filepath, 'rb') as f:
                 content = f.read()
-                return hashlib.md5(content).hexdigest()[:12]
+                return hashlib.md5(content).hexdigest()[:16]
         except:
-            return hashlib.md5(filepath.encode()).hexdigest()[:12]
+            return hashlib.md5(filepath.encode()).hexdigest()[:16]
 
     def get_analysis_cache_path(self, srt_file: str) -> str:
         """获取分析结果缓存路径"""
         file_hash = self.get_file_hash(os.path.join(self.srt_folder, srt_file))
         episode_num = self.extract_episode_number(srt_file)
-        return os.path.join(self.cache_folder, f"analysis_E{episode_num}_{file_hash}.json")
+        return os.path.join(self.analysis_cache_folder, f"analysis_E{episode_num}_{file_hash}.json")
 
     def save_analysis_cache(self, srt_file: str, analysis_result: Dict):
         """保存分析结果到缓存"""
@@ -149,7 +167,7 @@ class StableTVClipper:
         """获取剪辑状态文件路径"""
         file_hash = self.get_file_hash(os.path.join(self.srt_folder, srt_file))
         episode_num = self.extract_episode_number(srt_file)
-        return os.path.join(self.cache_folder, f"clip_status_E{episode_num}_{file_hash}.json")
+        return os.path.join(self.clip_status_folder, f"clip_status_E{episode_num}_{file_hash}.json")
 
     def save_clip_status(self, srt_file: str, clip_status: Dict):
         """保存剪辑状态"""
@@ -375,7 +393,8 @@ class StableTVClipper:
             'content_summary': self._generate_content_summary(subtitles, start_idx, end_idx),
             'third_person_narration': self._generate_third_person_narration(subtitles, start_idx, end_idx, plot_type),
             'content_highlights': self._extract_content_highlights(subtitles, start_idx, end_idx),
-            'genre': self.detected_genre
+            'genre': self.detected_genre,
+            'corrected_errors': self._get_corrected_errors_in_segment(subtitles, start_idx, end_idx)
         }
 
     def _find_sentence_start(self, subtitles: List[Dict], search_start: int, anchor: int) -> int:
@@ -468,7 +487,6 @@ class StableTVClipper:
                 return f"E{episode_num}-证据披露：{plot_type}震撼时刻"
             else:
                 return f"E{episode_num}-法律纠葛：{plot_type}核心片段"
-
         elif self.detected_genre == '爱情剧':
             if plot_type == '情感爆发':
                 return f"E{episode_num}-情感高潮：{plot_type}感人瞬间"
@@ -476,7 +494,6 @@ class StableTVClipper:
                 return f"E{episode_num}-爱情转折：{plot_type}关键决定"
             else:
                 return f"E{episode_num}-爱情故事：{plot_type}精彩片段"
-
         else:
             return f"E{episode_num}-{plot_type}：剧情核心时刻"
 
@@ -653,6 +670,17 @@ class StableTVClipper:
             highlights.append("情感冲击深度共鸣")
 
         return highlights if highlights else ["精彩剧情发展", "角色深度刻画"]
+
+    def _get_corrected_errors_in_segment(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> List[str]:
+        """获取该片段中修正的错别字"""
+        corrected = []
+        content = ' '.join([subtitles[i]['text'] for i in range(start_idx, end_idx + 1)])
+        
+        for old, new in self.corrections.items():
+            if old in content:
+                corrected.append(f"'{old}' → '{new}'")
+        
+        return corrected
 
     def generate_next_episode_connection(self, plot_points: List[Dict], episode_num: str, previous_context: str = "") -> str:
         """生成与下一集的衔接说明"""
@@ -902,12 +930,14 @@ class StableTVClipper:
 
 【错别字修正说明】
 本片段字幕已自动修正常见错别字：
-• "防衛" → "防卫"
-• "正當" → "正当"  
-• "証據" → "证据"
-• "檢察官" → "检察官"
-等常见错误已在描述中统一修正，方便剪辑时参考。
+"""
+            if plot_point.get('corrected_errors'):
+                for correction in plot_point['corrected_errors']:
+                    content += f"• {correction}\n"
+            else:
+                content += f"• 未发现需要修正的错别字\n"
 
+            content += f"""
 【剪辑技术说明】
 • 片段保证在完整句子处开始和结束，确保对话完整性
 • 时间轴已优化，确保一句话讲完不会被截断
@@ -992,8 +1022,11 @@ class StableTVClipper:
 
         print(f"📁 视频文件: {os.path.basename(video_file)}")
 
+        # 构建上一集的上下文信息
+        previous_context = self._build_previous_context(episode_num)
+
         # 生成下集衔接说明
-        next_episode_connection = self.generate_next_episode_connection(plot_points, episode_num)
+        next_episode_connection = self.generate_next_episode_connection(plot_points, episode_num, previous_context)
 
         episode_summary = {
             'episode_number': episode_num,
@@ -1003,11 +1036,15 @@ class StableTVClipper:
             'plot_points': plot_points,
             'total_duration': sum(point['duration'] for point in plot_points),
             'next_episode_connection': next_episode_connection,
+            'previous_context': previous_context,
             'analysis_timestamp': datetime.now().isoformat()
         }
 
         # 保存分析结果到缓存
         self.save_analysis_cache(srt_filename, episode_summary)
+
+        # 更新剧集上下文
+        self._update_series_context(episode_summary)
 
         # 创建视频片段（稳定版本）
         created_clips = self.create_video_clips_stable(plot_points, video_file, srt_filename)
@@ -1035,6 +1072,52 @@ class StableTVClipper:
                 return False
                 
         return True
+
+    def _build_previous_context(self, current_episode: str) -> str:
+        """构建上一集的上下文信息"""
+        if not self.series_context['previous_episodes']:
+            return "这是第一集或暂无前集上下文信息"
+        
+        # 获取最近一集的信息
+        last_episode = self.series_context['previous_episodes'][-1]
+        
+        context_parts = []
+        context_parts.append(f"上一集（第{last_episode.get('episode_number', '?')}集）剧情回顾：")
+        context_parts.append(f"• 剧情类型：{last_episode.get('genre', '未知')}")
+        context_parts.append(f"• 主要故事线：{last_episode.get('next_episode_connection', '剧情发展')}")
+        
+        if last_episode.get('plot_points'):
+            context_parts.append("• 关键剧情点：")
+            for point in last_episode['plot_points'][-2:]:  # 最近2个剧情点
+                context_parts.append(f"  - {point.get('plot_type', '未知')}: {point.get('plot_significance', '重要发展')}")
+        
+        # 主线剧情
+        if self.series_context['main_storylines']:
+            context_parts.append("持续主线剧情：")
+            for storyline in self.series_context['main_storylines'][-3:]:  # 最近3个主线
+                context_parts.append(f"• {storyline}")
+        
+        return '\n'.join(context_parts)
+
+    def _update_series_context(self, episode_summary: Dict):
+        """更新剧集上下文"""
+        # 添加到历史记录
+        self.series_context['previous_episodes'].append(episode_summary)
+        
+        # 只保留最近5集
+        if len(self.series_context['previous_episodes']) > 5:
+            self.series_context['previous_episodes'] = self.series_context['previous_episodes'][-5:]
+        
+        # 更新主线剧情
+        if episode_summary.get('plot_points'):
+            for point in episode_summary['plot_points']:
+                significance = point.get('plot_significance', '')
+                if significance and significance not in self.series_context['main_storylines']:
+                    self.series_context['main_storylines'].append(significance)
+        
+        # 只保留最近10个主线
+        if len(self.series_context['main_storylines']) > 10:
+            self.series_context['main_storylines'] = self.series_context['main_storylines'][-10:]
 
     def process_all_episodes_stable(self):
         """处理所有集数（稳定版本 - 批量处理）"""
@@ -1079,7 +1162,7 @@ class StableTVClipper:
         print(f"✅ 成功处理: {len(all_episodes)}/{len(srt_files)} 集")
         print(f"🎬 生成片段: {total_clips} 个")
         print(f"📁 输出目录: {self.clips_folder}/")
-        print(f"📄 详细报告: {self.reports_folder}/稳定版剪辑报告.txt")
+        print(f"📄 详细报告: {self.reports_folder}/完整智能剪辑报告.txt")
         print(f"💾 缓存目录: {self.cache_folder}/")
 
     def create_final_report_stable(self, episodes: List[Dict], total_clips: int):
@@ -1087,18 +1170,22 @@ class StableTVClipper:
         if not episodes:
             return
 
-        report_path = os.path.join(self.reports_folder, "稳定版剪辑报告.txt")
+        report_path = os.path.join(self.reports_folder, "完整智能剪辑报告.txt")
 
-        content = f"""📺 稳定版智能电视剧剪辑系统报告
+        content = f"""📺 完整智能电视剧剪辑系统报告
 {"=" * 100}
 
-🎯 系统稳定性特点：
-• 分析结果缓存机制 - 避免重复API调用
-• 剪辑状态跟踪 - 支持断点续传
-• 多次执行结果一致性保证
-• 完整句子边界识别 - 确保对话完整
-• 自动重试机制 - 提高剪辑成功率
-• 错误恢复和状态保存
+🎯 系统完整功能特点：
+• 多剧情类型自动识别和适配
+• 按剧情点智能分剪（关键冲突、人物转折、线索揭露、情感爆发、重要对话）
+• 非连续时间段智能合并剪辑，保证剧情连贯
+• 第三人称旁白字幕自动生成
+• 跨集连贯性分析和下集衔接说明
+• 智能错别字自动修正（防衛→防卫，正當→正当等）
+• 完整句子边界保证，确保一句话讲完
+• API分析结果缓存机制，避免重复调用
+• 剪辑结果一致性保证和断点续传
+• 固定输出格式，便于剪辑参考
 
 📊 处理统计：
 • 总集数: {len(episodes)} 集
@@ -1133,12 +1220,13 @@ class StableTVClipper:
 
         content += f"""
 
-💾 缓存和稳定性信息：
-• 分析结果缓存文件: {len([f for f in os.listdir(self.cache_folder) if f.startswith('analysis_')])} 个
-• 剪辑状态文件: {len([f for f in os.listdir(self.cache_folder) if f.startswith('clip_status_')])} 个
+💾 系统稳定性信息：
+• 分析结果缓存文件: {len([f for f in os.listdir(self.analysis_cache_folder) if f.endswith('.json')])} 个
+• 剪辑状态文件: {len([f for f in os.listdir(self.clip_status_folder) if f.endswith('.json')])} 个
 • 多次执行一致性: ✅ 保证
 • 断点续传支持: ✅ 支持
 • 完整句子保证: ✅ 保证
+• 错别字自动修正: ✅ 支持
 
 📺 分集详细信息：
 {"=" * 80}
@@ -1152,6 +1240,9 @@ class StableTVClipper:
 总时长：{episode['total_duration']:.1f} 秒
 分析时间：{episode.get('analysis_timestamp', '未知')}
 
+上下文信息：
+{episode.get('previous_context', '暂无')}
+
 剧情点详情：
 """
             for i, plot_point in enumerate(episode['plot_points'], 1):
@@ -1160,6 +1251,7 @@ class StableTVClipper:
      意义：{plot_point['plot_significance']}
      亮点：{', '.join(plot_point['content_highlights'])}
      句子完整性：✅ 保证在完整句子处切分
+     错别字修正：{', '.join(plot_point.get('corrected_errors', [])) if plot_point.get('corrected_errors') else '无需修正'}
 """
 
             content += f"""
@@ -1172,17 +1264,20 @@ class StableTVClipper:
 
 🎯 使用说明：
 1. 所有视频片段保存在 {self.clips_folder}/ 目录
-2. 每个片段都有对应的详细说明文件
+2. 每个片段都有对应的详细说明文件（_片段说明.txt）
 3. 分析结果已缓存，重复执行不会重复分析
 4. 剪辑状态已保存，支持断点续传
 5. 片段保证在完整句子处切分，不会截断对话
+6. 自动修正常见错别字，在说明文件中标注
+7. 第三人称旁白字幕可直接用于视频制作
 
-🔧 稳定性技术特点：
+🔧 技术特点：
 • 文件内容哈希缓存 - 确保内容变化时重新分析
 • 多重验证机制 - 确保分析结果完整性
 • 自动重试和错误恢复
 • 完整句子边界智能识别
 • 状态持久化存储
+• 跨集上下文连贯性维护
 
 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
@@ -1190,24 +1285,26 @@ class StableTVClipper:
         try:
             with open(report_path, 'w', encoding='utf-8') as f:
                 f.write(content)
-            print(f"📄 稳定版报告已保存")
+            print(f"📄 完整系统报告已保存")
         except Exception as e:
             print(f"⚠️ 报告保存失败: {e}")
 
 def main():
     """主函数"""
-    print("🎬 稳定版智能电视剧剪辑系统")
+    print("🎬 完整智能电视剧剪辑系统")
     print("=" * 60)
-    print("🎯 稳定性特点：")
-    print("• 分析结果缓存机制，避免重复API调用")
-    print("• 剪辑状态跟踪，支持断点续传")
-    print("• 多次执行结果一致性保证")
-    print("• 完整句子边界识别，确保对话完整")
-    print("• 自动重试机制，提高剪辑成功率")
-    print("• 智能错别字修正和固定输出格式")
+    print("🎯 系统功能：")
+    print("• 多剧情类型自动识别")
+    print("• 按剧情点分剪短视频（关键冲突、人物转折、线索揭露等）")
+    print("• 非连续时间段智能合并剪辑")
+    print("• 第三人称旁白字幕生成")
+    print("• 跨集连贯性分析和衔接说明")
+    print("• 智能错别字修正")
+    print("• 完整句子边界保证")
+    print("• API缓存和断点续传")
     print("=" * 60)
 
-    clipper = StableTVClipper()
+    clipper = IntelligentTVClipperSystem()
 
     # 检查必要文件
     if not os.path.exists(clipper.srt_folder):
@@ -1219,6 +1316,26 @@ def main():
         print(f"❌ 视频目录不存在: {clipper.videos_folder}")
         print("请创建videos目录并放入视频文件")
         return
+
+    # 检查字幕文件
+    srt_files = [f for f in os.listdir(clipper.srt_folder) if f.endswith(('.srt', '.txt'))]
+    if not srt_files:
+        print(f"⚠️ {clipper.srt_folder}/ 目录中未找到字幕文件")
+        print("请将字幕文件（.srt 或 .txt）放入 srt/ 目录")
+        return
+
+    # 检查视频文件
+    video_files = []
+    if os.path.exists(clipper.videos_folder):
+        video_files = [f for f in os.listdir(clipper.videos_folder) 
+                      if f.lower().endswith(('.mp4', '.mkv', '.avi', '.mov', '.wmv'))]
+    
+    if not video_files:
+        print(f"⚠️ {clipper.videos_folder}/ 目录中未找到视频文件")
+        print("请将视频文件放入 videos/ 目录")
+        return
+
+    print(f"✅ 找到 {len(srt_files)} 个字幕文件和 {len(video_files)} 个视频文件")
 
     clipper.process_all_episodes_stable()
 
