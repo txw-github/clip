@@ -74,8 +74,16 @@ class CompleteIntelligentTVClipper:
             }
         }
 
-        # 错别字修正库（仅在AI分析成功时使用）
-        self.corrections = {}
+        # 错别字修正库（扩展版）
+        self.corrections = {
+            '防衛': '防卫', '正當': '正当', '証據': '证据', '檢察官': '检察官',
+            '審判': '审判', '辯護': '辩护', '起訴': '起诉', '調查': '调查',
+            '發現': '发现', '決定': '决定', '選擇': '选择', '聽證會': '听证会',
+            '問題': '问题', '機會': '机会', '開始': '开始', '結束': '结束',
+            '証人': '证人', '証言': '证言', '実現': '实现', '対話': '对话',
+            '関係': '关系', '実际': '实际', '対于': '对于', '変化': '变化',
+            '無罪': '无罪', '有罪': '有罪', '検察': '检察', '弁護': '辩护'
+        }
 
         # 全剧上下文管理
         self.series_context = {
@@ -382,8 +390,16 @@ class CompleteIntelligentTVClipper:
             print(f"❌ 无法读取文件: {filepath}")
             return []
 
-        # 不进行写死的错别字修正
+        # 错别字修正
+        original_content = content
+        for old, new in self.corrections.items():
+            content = content.replace(old, new)
+        
+        # 记录修正的错别字
         corrected_errors = []
+        for old, new in self.corrections.items():
+            if old in original_content:
+                corrected_errors.append(f"'{old}' → '{new}'")
 
         # 解析字幕条目
         subtitles = []
@@ -440,6 +456,9 @@ class CompleteIntelligentTVClipper:
                         'end_seconds': (i + 1) * 2
                     })
 
+        if corrected_errors:
+            print(f"✅ 修正错别字: {', '.join(corrected_errors[:3])}{'...' if len(corrected_errors) > 3 else ''}")
+        
         print(f"✅ 解析完成: {len(subtitles)} 条字幕")
         return subtitles
 
@@ -462,13 +481,80 @@ class CompleteIntelligentTVClipper:
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
     def detect_genre_and_themes(self, subtitles: List[Dict]) -> Tuple[str, List[str]]:
-        """AI优先的剧情类型识别（不使用固定规则）"""
-        # 只有在AI分析成功时才进行类型识别
-        if not self.ai_config.get('enabled'):
-            return None, []
+        """智能识别剧情类型和主题"""
+        if len(subtitles) < 50:
+            return '通用剧', ['日常生活']
+
+        # 分析前300条字幕
+        sample_text = " ".join([sub['text'] for sub in subtitles[:300]])
         
-        # 返回空值，让AI分析来决定类型和主题
-        return None, []
+        genre_patterns = {
+            '法律剧': {
+                'keywords': ['法官', '检察官', '律师', '法庭', '审判', '证据', '案件', '起诉', '辩护', '判决', '申诉', '听证会', '正当防卫', '法律'],
+                'weight': 1.0
+            },
+            '爱情剧': {
+                'keywords': ['爱情', '喜欢', '心动', '表白', '约会', '分手', '复合', '结婚', '情侣', '恋人', '爱人', '感情', '浪漫'],
+                'weight': 1.0
+            },
+            '悬疑剧': {
+                'keywords': ['真相', '秘密', '调查', '线索', '破案', '凶手', '神秘', '隐瞒', '疑点', '诡异', '谜团', '推理'],
+                'weight': 1.0
+            },
+            '家庭剧': {
+                'keywords': ['家庭', '父母', '孩子', '兄弟', '姐妹', '亲情', '家人', '团聚', '血缘', '亲子', '家族'],
+                'weight': 1.0
+            },
+            '职场剧': {
+                'keywords': ['公司', '工作', '老板', '同事', '职场', '事业', '升职', '项目', '会议', '商务', '职业'],
+                'weight': 1.0
+            },
+            '古装剧': {
+                'keywords': ['皇上', '王爷', '公主', '大人', '官府', '江湖', '武功', '朝廷', '宫廷', '侠客', '古代'],
+                'weight': 1.0
+            }
+        }
+
+        genre_scores = {}
+        for genre, pattern in genre_patterns.items():
+            score = 0
+            for keyword in pattern['keywords']:
+                score += sample_text.count(keyword) * pattern['weight']
+            genre_scores[genre] = score
+
+        # 选择最高分的类型
+        best_genre = max(genre_scores, key=genre_scores.get)
+        max_score = genre_scores[best_genre]
+        
+        if max_score < 3:
+            best_genre = '通用剧'
+
+        # 识别主题
+        theme_patterns = {
+            '正义与法律': ['正义', '法律', '公平', '真相', '维权'],
+            '爱情与情感': ['爱情', '感情', '心动', '浪漫', '情深'],
+            '家庭与亲情': ['家庭', '亲情', '父母', '孩子', '团聚'],
+            '成长与蜕变': ['成长', '改变', '坚持', '努力', '突破'],
+            '友情与信任': ['朋友', '信任', '支持', '帮助', '友谊'],
+            '事业与梦想': ['梦想', '事业', '成功', '努力', '坚持']
+        }
+
+        detected_themes = []
+        for theme, keywords in theme_patterns.items():
+            theme_score = sum(sample_text.count(kw) for kw in keywords)
+            if theme_score >= 2:
+                detected_themes.append(theme)
+
+        if not detected_themes:
+            detected_themes = ['人生感悟']
+
+        self.series_context['genre_detected'] = best_genre
+        self.series_context['main_themes'] = detected_themes
+
+        print(f"🎭 检测到剧情类型: {best_genre}")
+        print(f"🎯 主要主题: {', '.join(detected_themes)}")
+
+        return best_genre, detected_themes
 
     def build_series_context(self, episode_num: str) -> str:
         """构建全剧上下文信息"""
@@ -541,16 +627,22 @@ class CompleteIntelligentTVClipper:
         # 构建完整的剧情文本
         full_subtitle_text = "\n".join([f"[{sub['start']} --> {sub['end']}] {sub['text']}" for sub in subtitles])
         
-        # AI自由分析，不限制固定类型
+        # 根据剧情类型调整提示词
+        genre_specific_guidance = self._get_genre_specific_guidance(genre)
         
         prompt = f"""你是专业的电视剧剧情分析师，现在要分析第{episode_num}集的内容，识别最精彩的剧情点。
 
 【剧集基本信息】
 - 集数：第{episode_num}集
+- 剧情类型：{genre}
+- 主要主题：{', '.join(themes)}
 - 总时长：{len(subtitles)}条字幕
 
 【全剧上下文】
 {series_context}
+
+【类型特定指导】
+{genre_specific_guidance}
 
 【完整字幕内容】
 {full_subtitle_text}
@@ -569,13 +661,12 @@ class CompleteIntelligentTVClipper:
 {{
     "episode_analysis": {{
         "episode_number": "{episode_num}",
-        "auto_detected_genre": "根据内容自动识别的剧情类型",
+        "genre": "{genre}",
         "main_theme": "本集核心主题",
         "story_progression": "在整个剧情中的作用",
         "emotional_arc": "情感发展线",
         "key_characters": ["主要角色1", "主要角色2"],
-        "main_conflicts": ["核心冲突1", "核心冲突2"],
-        "corrected_errors": ["如果发现错别字，列出修正内容"]
+        "main_conflicts": ["核心冲突1", "核心冲突2"]
     }},
     "plot_points": [
         {{
@@ -613,15 +704,14 @@ class CompleteIntelligentTVClipper:
 - 第三人称旁白要专业且吸引人
 - 考虑跨集连贯性"""
 
-        system_prompt = f"""你是资深的电视剧分析专家，具有丰富的剧情剪辑经验。你的任务是：
-1. 自动识别剧情类型和特点，不受预设限制
-2. 准确识别精彩时刻和剧情转折点
+        system_prompt = f"""你是资深的{genre}分析专家，具有丰富的电视剧剪辑经验。你的任务是：
+1. 深度理解{genre}的特点和观众期待
+2. 准确识别该类型剧集的精彩时刻
 3. 确保时间段的准确性和完整性
 4. 生成专业的剧情分析和旁白
 5. 保证跨集剧情连贯性
-6. 发现并修正可能的错别字
 
-请完全根据内容进行分析，不要受到任何预设类型的限制。"""
+请确保分析结果具有该集的独特性，体现{genre}的特色。"""
 
         try:
             print(f"🤖 AI深度分析第{episode_num}集中...")
@@ -1563,34 +1653,6 @@ class CompleteIntelligentTVClipper:
         except Exception as e:
             print(f"   ⚠️ 说明文件生成失败: {e}")
 
-    def _apply_corrections_from_ai(self, analysis_result: Dict):
-        """根据AI分析结果应用错别字修正"""
-        try:
-            # 从AI分析结果中提取可能的错别字修正信息
-            episode_analysis = analysis_result.get('episode_analysis', {})
-            
-            # 如果AI分析包含了错别字修正信息，显示出来
-            corrections_applied = []
-            
-            # 检查常见的繁体字转简体字的情况
-            common_corrections = {
-                '防衛': '防卫', '正當': '正当', '証據': '证据', '檢察官': '检察官',
-                '調查': '调查', '辯護': '辩护', '聽證會': '听证会'
-            }
-            
-            # 从分析结果的文本中检查是否包含这些修正
-            all_text = str(analysis_result)
-            for traditional, simplified in common_corrections.items():
-                if simplified in all_text and traditional not in all_text:
-                    corrections_applied.append(f"'{traditional}' → '{simplified}'")
-            
-            if corrections_applied:
-                print(f"✅ AI分析包含错别字修正: {', '.join(corrections_applied[:3])}{'...' if len(corrections_applied) > 3 else ''}")
-                
-        except Exception as e:
-            # 静默处理，不影响主流程
-            pass
-
     def update_series_context(self, episode_num: str, analysis_result: Dict, plot_points: List[Dict]):
         """更新全剧上下文"""
         try:
@@ -1651,24 +1713,43 @@ class CompleteIntelligentTVClipper:
                 print(f"❌ 字幕解析失败")
                 return None
 
-            # 3. 构建剧集上下文
+            # 3. 识别剧情类型和主题
+            genre, themes = self.detect_genre_and_themes(subtitles)
+
+            # 4. 构建剧集上下文
             series_context = self.build_series_context(episode_num)
 
-            # 4. AI分析优先策略 - 宁缺毋滥
-            ai_analysis = self.ai_analyze_episode_complete(subtitles, episode_num, None, [], series_context)
+            # 5. AI分析优先，基础规则兜底
+            ai_analysis = self.ai_analyze_episode_complete(subtitles, episode_num, genre, themes, series_context)
             
             if ai_analysis and ai_analysis.get('plot_points'):
                 analysis_result = ai_analysis
                 plot_points = ai_analysis['plot_points']
                 print(f"🤖 AI分析成功: {len(plot_points)} 个剧情点")
-                
-                # 只有AI分析成功时才进行错别字修正
-                self._apply_corrections_from_ai(analysis_result)
             else:
-                print("❌ AI分析失败，跳过该集（宁缺毋滥）")
-                return None
+                print("📝 AI分析失败，使用基础规则分析")
+                plot_points = self.analyze_plot_points_basic(subtitles, episode_num, genre, themes)
                 
-                # 已在上面处理，不需要基础规则兜底
+                # 构建基础分析结果
+                analysis_result = {
+                    'episode_analysis': {
+                        'episode_number': episode_num,
+                        'genre': genre,
+                        'main_theme': f'第{episode_num}集主要内容',
+                        'story_progression': '剧情发展',
+                        'emotional_arc': '情感推进',
+                        'key_characters': ['主要角色'],
+                        'main_conflicts': ['核心冲突']
+                    },
+                    'plot_points': plot_points,
+                    'episode_summary': {
+                        'core_storyline': f'第{episode_num}集核心剧情',
+                        'character_development': '角色发展',
+                        'plot_advancement': '剧情推进',
+                        'cliffhanger_or_resolution': '悬念设置',
+                        'next_episode_connection': f'与第{int(episode_num)+1}集的衔接'
+                    }
+                }
 
             if not plot_points:
                 print(f"❌ 未找到合适的剧情点")
