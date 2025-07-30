@@ -1,83 +1,85 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
-智能电视剧剪辑系统启动脚本 - 集成用户引导
+智能剧情点剪辑系统启动脚本
+一键启动完整的剧情点分析和剪辑流程
 """
 
 import os
 import sys
 
 def setup_directories():
-    """设置必要目录结构"""
+    """设置必要目录"""
     directories = ['srt', 'videos', 'clips', 'cache', 'reports']
-
+    
     for directory in directories:
         if not os.path.exists(directory):
             os.makedirs(directory)
             print(f"✓ 创建目录: {directory}/")
 
-def check_files():
-    """检查文件准备情况"""
-    print("\n📋 文件检查:")
-
-    # 检查字幕文件
-    srt_files = [f for f in os.listdir('srt') if f.endswith(('.srt', '.txt'))] if os.path.exists('srt') else []
-    if srt_files:
-        print(f"✅ 找到 {len(srt_files)} 个字幕文件")
-    else:
-        print("⚠️ srt/ 目录中未找到字幕文件")
-        print("   请将字幕文件放入 srt/ 目录")
-
+def check_requirements():
+    """检查系统要求"""
+    print("🔍 检查系统要求...")
+    
+    # 检查SRT文件
+    srt_files = []
+    if os.path.exists('srt'):
+        srt_files = [f for f in os.listdir('srt') if f.endswith(('.srt', '.txt'))]
+    
+    if not srt_files:
+        print("❌ 未找到字幕文件")
+        print("📋 使用说明:")
+        print("1. 将字幕文件(.srt或.txt)放入 srt/ 目录")
+        print("2. 将对应视频文件放入 videos/ 目录") 
+        print("3. 文件名要包含集数信息，如: S01E01.srt")
+        return False
+    
     # 检查视频文件
-    video_files = [f for f in os.listdir('videos') 
-                   if f.lower().endswith(('.mp4', '.mkv', '.avi', '.mov', '.wmv'))] if os.path.exists('videos') else []
-    if video_files:
-        print(f"✅ 找到 {len(video_files)} 个视频文件")
-    else:
-        print("⚠️ videos/ 目录中未找到视频文件")
-        print("   请将视频文件放入 videos/ 目录")
-
-    # 检查FFmpeg
-    try:
-        import subprocess
-        result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print("✅ FFmpeg 已安装")
-        else:
-            print("❌ FFmpeg 未正确安装")
-    except:
-        print("❌ FFmpeg 未安装")
-        print("   请安装FFmpeg以支持视频剪辑功能")
-
-    return len(srt_files) > 0 and len(video_files) > 0
+    video_files = []
+    if os.path.exists('videos'):
+        video_files = [f for f in os.listdir('videos') 
+                      if f.lower().endswith(('.mp4', '.mkv', '.avi', '.mov', '.wmv'))]
+    
+    if not video_files:
+        print("❌ 未找到视频文件")
+        print("📋 请将视频文件放入 videos/ 目录")
+        return False
+    
+    print(f"✅ 找到 {len(srt_files)} 个字幕文件")
+    print(f"✅ 找到 {len(video_files)} 个视频文件")
+    return True
 
 def main():
     """主启动函数"""
-    print("🎬 智能电视剧剪辑系统")
+    print("🎬 智能剧情点剪辑系统")
     print("=" * 60)
-
-    # 检查是否需要用户引导
-    if not os.path.exists("user_config.json"):
-        print("🎯 首次使用，启动配置引导...")
-        try:
-            from user_guide import UserGuideSystem
-            guide = UserGuideSystem()
-            if not guide.run_complete_guide():
-                return
-        except ImportError:
-            print("❌ 引导系统文件缺失，直接启动主系统")
-    else:
-        print("✅ 检测到配置文件，直接启动...")
-
-    # 启动主系统
+    print("🎯 功能特色:")
+    print("• 智能识别5种剧情点类型")
+    print("• 按剧情点分段剪辑(关键冲突、人物转折、线索揭露)")
+    print("• 非连续时间段智能合并，保证剧情连贯")
+    print("• 自动生成旁观者叙述字幕")
+    print("• 完整故事线说明")
+    print("• 智能错别字修正")
+    print("=" * 60)
+    
+    # 设置目录
+    setup_directories()
+    
+    # 检查要求
+    if not check_requirements():
+        return
+    
+    # 导入并运行主系统
     try:
-        from clean_main import main as clipper_main
-        clipper_main()
-    except ImportError:
-        print("❌ 主系统文件缺失，请检查 clean_main.py")
+        from intelligent_plot_clipper import main as run_clipper
+        run_clipper()
+    except ImportError as e:
+        print(f"❌ 导入失败: {e}")
+        print("请确保 intelligent_plot_clipper.py 存在")
     except Exception as e:
-        print(f"❌ 系统运行出错: {e}")
+        print(f"❌ 运行出错: {e}")
 
 if __name__ == "__main__":
     main()
