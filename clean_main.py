@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-完整智能电视剧剪辑系统 - 集成版
-解决所有15个核心问题的完整方案
+完整智能电视剧剪辑系统 - 最终稳定版
+解决所有16个核心问题的完整方案
 """
 
 import os
@@ -11,13 +11,14 @@ import re
 import json
 import subprocess
 import hashlib
-import requests
+import time
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 import time
+import requests
 
 class CompleteIntelligentTVClipper:
-    """完整智能电视剧剪辑系统"""
+    """完整智能电视剧剪辑系统 - 稳定版"""
 
     def __init__(self):
         # 目录结构
@@ -34,7 +35,7 @@ class CompleteIntelligentTVClipper:
                       self.cache_folder, self.reports_folder, self.analysis_cache_folder, self.clip_status_folder]:
             os.makedirs(folder, exist_ok=True)
 
-        # 剧情点分类配置 - 问题3：按剧情点分类
+        # 剧情点分类配置
         self.plot_point_types = {
             '关键冲突': {
                 'keywords': ['冲突', '争执', '对抗', '质疑', '反驳', '争议', '激烈', '愤怒', '不同意', '矛盾', '争论', '辩论', '反对', '抗议'],
@@ -74,7 +75,7 @@ class CompleteIntelligentTVClipper:
             }
         }
 
-        # 错别字修正库 - 问题7：错别字修正
+        # 错别字修正库
         self.corrections = {
             '防衛': '防卫', '正當': '正当', '証據': '证据', '檢察官': '检察官',
             '審判': '审判', '辯護': '辩护', '起訴': '起诉', '調查': '调查',
@@ -85,7 +86,7 @@ class CompleteIntelligentTVClipper:
             '無罪': '无罪', '有罪': '有罪', '検察': '检察', '弁護': '辩护'
         }
 
-        # 全剧上下文管理 - 问题4,8：跨集连贯性
+        # 全剧上下文管理
         self.series_context = {
             'previous_episodes': [],
             'main_storylines': [],
@@ -287,7 +288,7 @@ class CompleteIntelligentTVClipper:
         input("\n按回车键返回...")
 
     def get_file_hash(self, filepath: str) -> str:
-        """获取文件内容的MD5哈希值 - 问题14：确保一致性"""
+        """获取文件内容的MD5哈希值 - 确保一致性"""
         try:
             with open(filepath, 'rb') as f:
                 content = f.read()
@@ -297,13 +298,12 @@ class CompleteIntelligentTVClipper:
 
     def _extract_episode_number(self, filename: str) -> str:
         """从SRT文件名提取集数"""
-        # 支持多种集数格式
         patterns = [
-            r'[Ee](\d+)',           # E01, e01
-            r'EP(\d+)',             # EP01
-            r'第(\d+)集',           # 第1集
-            r'S\d+E(\d+)',          # S01E01
-            r'(\d+)',               # 纯数字
+            r'[Ee](\d+)',
+            r'EP(\d+)',
+            r'第(\d+)集',
+            r'S\d+E(\d+)',
+            r'(\d+)',
         ]
 
         for pattern in patterns:
@@ -311,12 +311,11 @@ class CompleteIntelligentTVClipper:
             if match:
                 return match.group(1).zfill(2)
 
-        # 如果没有找到数字，使用文件名
         base_name = os.path.splitext(filename)[0]
         return base_name
 
     def parse_srt_file(self, filepath: str) -> List[Dict]:
-        """解析SRT字幕文件，支持多种编码和格式"""
+        """解析SRT字幕文件"""
         print(f"📖 解析字幕: {os.path.basename(filepath)}")
 
         # 尝试多种编码读取文件
@@ -333,7 +332,7 @@ class CompleteIntelligentTVClipper:
             print(f"❌ 无法读取文件: {filepath}")
             return []
 
-        # 错别字修正 - 问题7
+        # 错别字修正
         original_content = content
         for old, new in self.corrections.items():
             content = content.replace(old, new)
@@ -347,9 +346,7 @@ class CompleteIntelligentTVClipper:
         # 解析字幕条目
         subtitles = []
 
-        # 支持SRT和其他格式
         if '-->' in content:
-            # 标准SRT格式
             blocks = re.split(r'\n\s*\n', content.strip())
 
             for block in blocks:
@@ -358,7 +355,6 @@ class CompleteIntelligentTVClipper:
                     try:
                         index = int(lines[0]) if lines[0].isdigit() else len(subtitles) + 1
 
-                        # 匹配时间格式
                         time_pattern = r'(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})'
                         time_match = re.search(time_pattern, lines[1])
 
@@ -424,11 +420,10 @@ class CompleteIntelligentTVClipper:
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
     def detect_genre_and_themes(self, subtitles: List[Dict]) -> Tuple[str, List[str]]:
-        """智能识别剧情类型和主题 - 问题1：适应不同剧情"""
+        """智能识别剧情类型和主题"""
         if len(subtitles) < 50:
             return '通用剧', ['日常生活']
 
-        # 分析前300条字幕
         sample_text = " ".join([sub['text'] for sub in subtitles[:300]])
 
         genre_patterns = {
@@ -465,7 +460,6 @@ class CompleteIntelligentTVClipper:
                 score += sample_text.count(keyword) * pattern['weight']
             genre_scores[genre] = score
 
-        # 选择最高分的类型
         best_genre = max(genre_scores, key=genre_scores.get)
         max_score = genre_scores[best_genre]
 
@@ -532,13 +526,13 @@ class CompleteIntelligentTVClipper:
         return '\n'.join(context_parts) if context_parts else f"正在分析第{episode_num}集的剧情内容"
 
     def get_analysis_cache_path(self, srt_file: str) -> str:
-        """获取分析结果缓存路径 - 问题11：API结果缓存"""
+        """获取分析结果缓存路径 - 问题11"""
         file_hash = self.get_file_hash(os.path.join(self.srt_folder, srt_file))
         episode_num = self._extract_episode_number(srt_file)
         return os.path.join(self.analysis_cache_folder, f"analysis_E{episode_num}_{file_hash}.json")
 
     def save_analysis_cache(self, srt_file: str, analysis_result: Dict):
-        """保存分析结果到缓存 - 问题11：API结果缓存"""
+        """保存分析结果到缓存 - 问题11"""
         cache_path = self.get_analysis_cache_path(srt_file)
         try:
             analysis_result['cache_timestamp'] = datetime.now().isoformat()
@@ -550,7 +544,7 @@ class CompleteIntelligentTVClipper:
             print(f"⚠️ 缓存保存失败: {e}")
 
     def load_analysis_cache(self, srt_file: str) -> Optional[Dict]:
-        """从缓存加载分析结果 - 问题11：API结果缓存"""
+        """从缓存加载分析结果 - 问题11"""
         cache_path = self.get_analysis_cache_path(srt_file)
         if os.path.exists(cache_path):
             try:
@@ -563,7 +557,7 @@ class CompleteIntelligentTVClipper:
         return None
 
     def call_ai_api(self, prompt: str, system_prompt: str = "") -> Optional[str]:
-        """统一AI API调用 - 问题11：API稳定性处理"""
+        """统一AI API调用 - 问题11：处理API不稳定"""
         if not self.ai_config.get('enabled'):
             return None
 
@@ -580,7 +574,7 @@ class CompleteIntelligentTVClipper:
             except Exception as e:
                 print(f"⚠️ AI调用失败 (尝试 {attempt+1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    time.sleep(2)  # 等待2秒后重试
+                    time.sleep(2)
 
         return None
 
@@ -748,7 +742,7 @@ class CompleteIntelligentTVClipper:
                         print(f"⚠️ AI返回的时间范围无效")
                         return None
 
-                                except json.JSONDecodeError as e:
+                except json.JSONDecodeError as e:
                     print(f"⚠️ AI响应JSON解析失败: {e}")
                     print(f"原始响应前300字符: {response[:300]}")
                 except Exception as e:
@@ -1959,6 +1953,7 @@ class CompleteIntelligentTVClipper:
 """
 
             content += f"""
+
 下集衔接：{episode_summary.get('next_episode_connection', '自然过渡')}
 """
 
@@ -1995,6 +1990,7 @@ class CompleteIntelligentTVClipper:
 def main():
     """主函数 - 问题9：集成到clean_main"""
     clipper = CompleteIntelligentTVClipper()
+    clipper.configure_ai_interactive() # new
     clipper.process_all_episodes()
 
 if __name__ == "__main__":
