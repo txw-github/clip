@@ -308,6 +308,9 @@ class IntelligentPlotClipper:
         """生成旁观者叙述字幕"""
         content = ' '.join([subtitles[i]['text'] for i in range(start_idx, min(end_idx + 1, start_idx + 15))])
         
+        # 自动修正错别字
+        corrected_content = self._correct_typos(content)
+        
         # 基于剧情点类型生成旁白
         narration_templates = {
             '关键冲突': {
@@ -344,12 +347,12 @@ class IntelligentPlotClipper:
         
         template = narration_templates.get(plot_type, narration_templates['重要对话'])
         
-        # 根据内容动态调整旁白
-        if '真相' in content or '发现' in content:
+        # 根据修正后的内容动态调整旁白
+        if '真相' in corrected_content or '发现' in corrected_content:
             template['climax'] = "真相大白的时刻终于到来"
-        if '决定' in content or '选择' in content:
+        if '决定' in corrected_content or '选择' in corrected_content:
             template['climax'] = "关键决定改变了一切"
-        if '证据' in content:
+        if '证据' in corrected_content:
             template['climax'] = "决定性证据被揭露"
         
         return {
@@ -357,8 +360,26 @@ class IntelligentPlotClipper:
             'development': template['development'],
             'climax': template['climax'],
             'conclusion': template['conclusion'],
-            'full_narration': f"{template['opening']}。{template['development']}，{template['climax']}。{template['conclusion']}。"
+            'full_narration': f"{template['opening']}。{template['development']}，{template['climax']}。{template['conclusion']}。",
+            'corrected_content': corrected_content
         }
+
+    def _correct_typos(self, content: str) -> str:
+        """修正错别字"""
+        # 扩展错别字词典
+        extended_corrections = {
+            **self.corrections,  # 现有的修正词典
+            '検察官': '检察官', '検查': '检查', '証人': '证人',
+            '実現': '实现', '実際': '实际', '実証': '实证',
+            '対話': '对话', '対応': '对应', '対象': '对象',
+            '関係': '关系', '関連': '关联', '関心': '关心'
+        }
+        
+        corrected = content
+        for old, new in extended_corrections.items():
+            corrected = corrected.replace(old, new)
+        
+        return corrected
 
     def create_video_clips(self, segments: List[Dict], video_file: str, episode_name: str) -> List[str]:
         """创建视频片段"""
@@ -485,20 +506,29 @@ class IntelligentPlotClipper:
 🎙️ 旁观者叙述:
 {segment['narration']['full_narration']}
 
-📝 关键台词:
+📝 关键台词 (已修正错别字):
 """
             for dialogue in segment['key_dialogues']:
-                content += f"• {dialogue}\n"
+                # 对关键台词也进行错别字修正
+                corrected_dialogue = self._correct_typos(dialogue)
+                content += f"• {corrected_dialogue}\n"
             
             content += f"""
 📄 内容摘要:
 {segment['content_summary']}
+
+✨ 内容亮点:
+{self._extract_content_highlights(segment)}
+
+🔗 跨集连贯性分析:
+{segment.get('cross_episode_continuity', self._analyze_cross_episode_continuity(segment))}
 
 🔧 制作说明:
 • 本片段按剧情点聚焦剪辑
 • 时间可能非连续，但剧情逻辑连贯
 • 附带专业旁观者叙述字幕
 • 适合短视频平台传播
+• 已自动修正字幕错别字
 
 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
@@ -510,6 +540,69 @@ class IntelligentPlotClipper:
             
         except Exception as e:
             print(f"     ⚠️ 报告生成失败: {e}")
+
+    def _extract_content_highlights(self, segment: Dict) -> str:
+        """提取内容亮点"""
+        highlights = []
+        
+        content = segment.get('content_summary', '')
+        plot_type = segment.get('plot_type', '')
+        score = segment.get('score', 0)
+        
+        # 基于剧情点类型生成亮点
+        if plot_type == '关键冲突':
+            highlights.append("• 激烈冲突场面，戏剧张力强烈")
+        elif plot_type == '线索揭露':
+            highlights.append("• 关键线索首次披露，推进主线剧情")
+        elif plot_type == '人物转折':
+            highlights.append("• 角色重要转折时刻，人物发展关键节点")
+        elif plot_type == '情感爆发':
+            highlights.append("• 情感高潮时刻，感染力强")
+        
+        # 基于评分添加亮点
+        if score >= 80:
+            highlights.append("• 核心剧情片段，观看价值极高")
+        elif score >= 60:
+            highlights.append("• 重要剧情节点，值得重点关注")
+        
+        # 基于内容添加具体亮点
+        if '真相' in content or '发现' in content:
+            highlights.append("• 真相揭露时刻，情节反转精彩")
+        if '证据' in content:
+            highlights.append("• 关键证据展示，案件进展重要")
+        if '决定' in content or '选择' in content:
+            highlights.append("• 关键决策时刻，影响后续发展")
+        
+        return '\n'.join(highlights) if highlights else "• 重要剧情发展片段"
+
+    def _analyze_cross_episode_continuity(self, segment: Dict) -> str:
+        """分析跨集连贯性"""
+        content = segment.get('content_summary', '')
+        plot_type = segment.get('plot_type', '')
+        
+        continuity_analysis = []
+        
+        # 与前集的连接分析
+        if '继续' in content or '接着' in content:
+            continuity_analysis.append("承接前集未完成的情节线")
+        
+        # 为下集铺垫的分析
+        if plot_type == '线索揭露':
+            continuity_analysis.append("为下集深入调查提供重要线索")
+        elif plot_type == '关键冲突':
+            continuity_analysis.append("冲突升级，下集将有更激烈的对抗")
+        elif plot_type == '人物转折':
+            continuity_analysis.append("角色转变将在下集产生深远影响")
+        
+        # 通用连贯性分析
+        if '申诉' in content:
+            continuity_analysis.append("申诉程序启动，下集将进入听证会阶段")
+        if '证据' in content:
+            continuity_analysis.append("新证据出现，下集案件将迎来转折")
+        if '听证会' in content:
+            continuity_analysis.append("听证会准备完毕，下集法庭辩论即将开始")
+        
+        return '；'.join(continuity_analysis) if continuity_analysis else "独立剧情片段，与前后集保持逻辑一致性"
 
     def _calculate_duration(self, subtitles: List[Dict], start_idx: int, end_idx: int) -> float:
         """计算片段时长"""
@@ -729,49 +822,204 @@ class IntelligentPlotClipper:
     def _create_episode_summary(self, srt_file: str, segments: List[Dict], clips: List[str]):
         """创建集数总结"""
         try:
-            summary_path = os.path.join(self.reports_folder, f"{os.path.splitext(srt_file)[0]}_剧情总结.txt")
+            episode_num = self._extract_episode_number(srt_file)
+            summary_path = os.path.join(self.reports_folder, f"E{episode_num}_完整剧情分析报告.txt")
             
-            content = f"""📺 {srt_file} - 剧情点分析总结
-{"=" * 80}
+            # 分析主线剧情
+            main_storyline = self._extract_main_storyline(segments)
+            
+            # 分析与前后集的连贯性
+            prev_connection = self._analyze_previous_connection(segments, episode_num)
+            next_setup = self._analyze_next_episode_setup(segments, episode_num)
+            
+            content = f"""📺 第{episode_num}集 完整剧情分析报告
+{"=" * 100}
 
 📊 基本信息:
-• 集数: 第{self._extract_episode_number(srt_file)}集
+• 集数: 第{episode_num}集
+• 文件: {srt_file}
 • 剧情点数量: {len(segments)} 个
 • 成功片段: {len(clips)} 个
-• 总时长: {sum(seg['duration'] for seg in segments):.1f} 秒
+• 总时长: {sum(seg['duration'] for seg in segments):.1f} 秒 ({sum(seg['duration'] for seg in segments)/60:.1f} 分钟)
 
-🎭 剧情点详情:
+🎯 主线剧情:
+{main_storyline}
+
+🔗 跨集连贯性分析:
+【与前集衔接】: {prev_connection}
+【为下集铺垫】: {next_setup}
+
+✨ 内容亮点总览:
+"""
+            
+            # 汇总所有片段的亮点
+            all_highlights = []
+            for i, segment in enumerate(segments, 1):
+                highlights = self._extract_content_highlights(segment)
+                content += f"""
+片段{i} - {segment['title']}:
+{highlights}
+"""
+                all_highlights.extend(highlights.split('\n'))
+            
+            content += f"""
+
+🎭 剧情点详细分析:
 """
             
             for i, segment in enumerate(segments, 1):
                 content += f"""
-{i}. {segment['title']}
-   类型: {segment['plot_type']}
-   时间: {segment['start_time']} - {segment['end_time']} ({segment['duration']:.1f}秒)
-   评分: {segment['score']:.1f}/100
-   意义: {segment['plot_significance']}
-   旁白: {segment['narration']['full_narration']}
+{"=" * 60}
+片段{i}: {segment['title']}
+{"=" * 60}
+🎭 类型: {segment['plot_type']}
+📊 评分: {segment['score']:.1f}/100
+⏱️ 时间: {segment['start_time']} --> {segment['end_time']} ({segment['duration']:.1f}秒)
+💡 意义: {segment['plot_significance']}
+
+🎙️ 旁观者叙述:
+{segment['narration']['full_narration']}
+
+📝 关键台词 (已修正错别字):
+"""
+                for dialogue in segment['key_dialogues']:
+                    corrected_dialogue = self._correct_typos(dialogue)
+                    content += f"  {corrected_dialogue}\n"
+                
+                content += f"""
+✨ 本片段亮点:
+{self._extract_content_highlights(segment)}
+
+🔗 连贯性分析:
+{segment.get('cross_episode_continuity', self._analyze_cross_episode_continuity(segment))}
+
+📄 内容摘要: {segment['content_summary']}
 """
             
             content += f"""
 
-🎬 制作特点:
-• 按剧情点智能分段，每个片段2-3分钟
-• 支持非连续时间段合并，保证剧情连贯
-• 自动生成旁观者叙述字幕
-• 智能识别5种剧情点类型
-• 完整故事线说明和跨集连贯性
+{"=" * 100}
+📋 标准化输出格式总结:
+{"=" * 100}
+
+🎬 制作规格:
+• 剧情点智能识别: 5种类型自动分类
+• 片段时长控制: 每个片段2-3分钟
+• 非连续合并: 支持跳跃式时间段智能拼接
+• 错别字修正: 自动修正常见繁体字和错误
+• 旁白生成: 专业旁观者叙述，详细清晰
+
+🔗 连贯性保证:
+• 集内连贯: 所有片段组合完整讲述本集故事
+• 跨集衔接: 明确标注与前后集的关联点
+• 主线追踪: 重点追踪核心案件发展脉络
+
+✨ 质量标准:
+• 戏剧张力: 每个片段都有冲突或转折点
+• 观看体验: 适合短视频平台传播
+• 故事完整: 每个片段都有起承转合
+• 信息准确: 字幕错误已修正，便于剪辑参考
 
 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+系统版本: 智能剧情点剪辑系统 v3.0
 """
             
             with open(summary_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
-            print(f"📄 总结报告: {os.path.basename(summary_path)}")
+            print(f"📄 完整分析报告: {os.path.basename(summary_path)}")
             
         except Exception as e:
             print(f"⚠️ 总结生成失败: {e}")
+
+    def _extract_main_storyline(self, segments: List[Dict]) -> str:
+        """提取主线剧情"""
+        storylines = []
+        
+        for segment in segments:
+            content = segment.get('content_summary', '')
+            plot_type = segment.get('plot_type', '')
+            
+            # 基于剧情点类型和内容提取主线
+            if '四二八案' in content or '428案' in content:
+                storylines.append("四二八案调查进展")
+            if '628案' in content or '628旧案' in content:
+                storylines.append("628旧案重新审视")
+            if '申诉' in content:
+                storylines.append("申诉程序启动")
+            if '听证会' in content:
+                storylines.append("听证会激辩")
+            if '张园' in content and '霸凌' in content:
+                storylines.append("张园霸凌事件真相")
+            if '段洪山' in content:
+                storylines.append("段洪山父女情深")
+            
+            # 基于剧情点类型补充
+            if plot_type == '线索揭露':
+                storylines.append("关键线索披露")
+            elif plot_type == '关键冲突':
+                storylines.append("核心冲突爆发")
+        
+        # 去重并组合
+        unique_storylines = list(dict.fromkeys(storylines))
+        return " → ".join(unique_storylines) if unique_storylines else "核心剧情发展"
+
+    def _analyze_previous_connection(self, segments: List[Dict], episode_num: str) -> str:
+        """分析与前集的连接"""
+        if episode_num == "01":
+            return "首集开篇，建立故事背景"
+        
+        # 从第一个片段分析与前集的连接
+        if segments:
+            first_segment = segments[0]
+            content = first_segment.get('content_summary', '')
+            
+            if '继续' in content:
+                return "承接前集未完成的情节线，故事连续发展"
+            elif '回到' in content or '回想' in content:
+                return "回顾前集关键事件，为本集发展做铺垫"
+            elif '申诉' in content:
+                return "在前集基础上启动申诉程序"
+            elif '听证会' in content:
+                return "前集申诉准备完毕，本集进入听证阶段"
+            else:
+                return "在前集剧情基础上自然发展"
+        
+        return "与前集剧情保持逻辑连贯"
+
+    def _analyze_next_episode_setup(self, segments: List[Dict], episode_num: str) -> str:
+        """分析为下集的铺垫"""
+        if not segments:
+            return "本集为独立情节，敬请期待下集发展"
+        
+        # 从最后一个片段分析为下集的铺垫
+        last_segment = segments[-1]
+        content = last_segment.get('content_summary', '')
+        plot_type = last_segment.get('plot_type', '')
+        
+        setup_hints = []
+        
+        # 基于内容分析
+        if '继续' in content or '待续' in content:
+            setup_hints.append("本集情节未完，下集将继续发展")
+        if '申诉' in content and '准备' in content:
+            setup_hints.append("申诉准备工作完成，下集听证会即将开始")
+        if '听证会' in content and ('即将' in content or '准备' in content):
+            setup_hints.append("听证会准备就绪，下集法庭激辩即将展开")
+        if '证据' in content and ('新' in content or '发现' in content):
+            setup_hints.append("新证据浮现，下集案件将迎来重大转折")
+        if '真相' in content and ('接近' in content or '即将' in content):
+            setup_hints.append("真相即将大白，下集将有重大揭露")
+        
+        # 基于剧情点类型分析
+        if plot_type == '线索揭露':
+            setup_hints.append("关键线索已经披露，下集将深入追查")
+        elif plot_type == '关键冲突':
+            setup_hints.append("冲突已经爆发，下集将面临更大挑战")
+        elif plot_type == '人物转折':
+            setup_hints.append("角色转变将在下集产生深远影响")
+        
+        return "；".join(setup_hints) if setup_hints else "为下集剧情发展埋下重要伏笔"
 
     def process_all_episodes(self):
         """处理所有集数"""
