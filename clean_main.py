@@ -350,18 +350,51 @@ class CompleteIntelligentTVClipper:
         """解析SRT字幕文件"""
         print(f"📖 解析字幕: {os.path.basename(filepath)}")
 
-        # 尝试多种编码读取文件
+        # 尝试多种编码读取文件，增强错误处理
         content = None
-        for encoding in ['utf-8', 'gbk', 'utf-16', 'gb2312', 'big5']:
+        used_encoding = None
+        
+        encodings = ['utf-8', 'utf-8-sig', 'gbk', 'gb2312', 'gb18030', 'utf-16', 'utf-16le', 'utf-16be', 'big5', 'cp936']
+        
+        for encoding in encodings:
             try:
-                with open(filepath, 'r', encoding=encoding, errors='ignore') as f:
+                with open(filepath, 'r', encoding=encoding, errors='replace') as f:
                     content = f.read()
-                    break
-            except:
+                    if content.strip():  # 确保读取到有效内容
+                        used_encoding = encoding
+                        print(f"✅ 使用编码: {encoding}")
+                        break
+            except Exception as e:
                 continue
 
-        if not content:
-            print(f"❌ 无法读取文件: {filepath}")
+        if not content or not content.strip():
+            # 最后尝试二进制读取
+            try:
+                with open(filepath, 'rb') as f:
+                    raw_data = f.read()
+                    # 尝试自动检测编码
+                    try:
+                        import chardet
+                        detected = chardet.detect(raw_data)
+                        if detected['encoding']:
+                            content = raw_data.decode(detected['encoding'], errors='replace')
+                            print(f"✅ 自动检测编码: {detected['encoding']}")
+                    except ImportError:
+                        # 如果没有chardet，使用最常见的编码
+                        for encoding in ['utf-8', 'gbk', 'gb18030']:
+                            try:
+                                content = raw_data.decode(encoding, errors='replace')
+                                if content.strip():
+                                    print(f"✅ 强制使用编码: {encoding}")
+                                    break
+                            except:
+                                continue
+            except Exception as e:
+                print(f"❌ 无法读取文件: {filepath}, 错误: {e}")
+                return []
+
+        if not content or not content.strip():
+            print(f"❌ 文件为空或无法解析: {filepath}")
             return []
 
         # 错别字修正
@@ -451,79 +484,64 @@ class CompleteIntelligentTVClipper:
         ms = int((seconds % 1) * 1000)
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
-    def detect_genre_and_themes(self, subtitles: List[Dict]) -> Tuple[str, List[str]]:
-        """智能识别剧情类型和主题"""
-        if len(subtitles) < 50:
-            return '通用剧', ['日常生活']
+    def detect_genre_and_themes_ai(self, subtitles: List[Dict]) -> Tuple[str, List[str]]:
+        """使用AI智能识别剧情类型和主题"""
+        if not self.ai_config.get('enabled'):
+            print("❌ AI未启用，无法进行类型识别")
+            return None, None
 
-        sample_text = " ".join([sub['text'] for sub in subtitles[:300]])
+        # 选择代表性字幕用于类型识别
+        representative_text = self._select_representative_subtitles(subtitles)
+        
+        prompt = f"""请分析以下电视剧内容，识别剧情类型和主要主题。
 
-        genre_patterns = {
-            '法律剧': {
-                'keywords': ['法官', '检察官', '律师', '法庭', '审判', '证据', '案件', '起诉', '辩护', '判决', '申诉', '听证会', '正当防卫', '法律'],
-                'weight': 1.0
-            },
-            '爱情剧': {
-                'keywords': ['爱情', '喜欢', '心动', '表白', '约会', '分手', '复合', '结婚', '情侣', '恋人', '爱人', '感情', '浪漫'],
-                'weight': 1.0
-            },
-            '悬疑剧': {
-                'keywords': ['真相', '秘密', '调查', '线索', '破案', '凶手', '神秘', '隐瞒', '疑点', '诡异', '谜团', '推理'],
-                'weight': 1.0
-            },
-            '家庭剧': {
-                'keywords': ['家庭', '父母', '孩子', '兄弟', '姐妹', '亲情', '家人', '团聚', '血缘', '亲子', '家族'],
-                'weight': 1.0
-            },
-            '职场剧': {
-                'keywords': ['公司', '工作', '老板', '同事', '职场', '事业', '升职', '项目', '会议', '商务', '职业'],
-                'weight': 1.0
-            },
-            '古装剧': {
-                'keywords': ['皇上', '王爷', '公主', '大人', '官府', '江湖', '武功', '朝廷', '宫廷', '侠客', '古代'],
-                'weight': 1.0
-            }
-        }
+【字幕内容样本】
+{representative_text}
 
-        genre_scores = {}
-        for genre, pattern in genre_patterns.items():
-            score = 0
-            for keyword in pattern['keywords']:
-                score += sample_text.count(keyword) * pattern['weight']
-            genre_scores[genre] = score
+请严格按照以下JSON格式返回：
+{{
+    "genre": "具体的剧情类型（如：法律剧、爱情剧、悬疑剧、家庭剧、职场剧、古装剧、现代都市剧等）",
+    "subgenre": "子类型描述",
+    "themes": ["主题1", "主题2", "主题3"],
+    "confidence": 0.9,
+    "reasoning": "判断依据"
+}}
 
-        best_genre = max(genre_scores, key=genre_scores.get)
-        max_score = genre_scores[best_genre]
+分析要点：
+1. 基于实际内容判断，不要预设类型
+2. 主题要具体且相关
+3. 给出判断的置信度"""
 
-        if max_score < 3:
-            best_genre = '通用剧'
-
-        # 识别主题
-        theme_patterns = {
-            '正义与法律': ['正义', '法律', '公平', '真相', '维权'],
-            '爱情与情感': ['爱情', '感情', '心动', '浪漫', '情深'],
-            '家庭与亲情': ['家庭', '亲情', '父母', '孩子', '团聚'],
-            '成长与蜕变': ['成长', '改变', '坚持', '努力', '突破'],
-            '友情与信任': ['朋友', '信任', '支持', '帮助', '友谊'],
-            '事业与梦想': ['梦想', '事业', '成功', '努力', '坚持']
-        }
-
-        detected_themes = []
-        for theme, keywords in theme_patterns.items():
-            theme_score = sum(sample_text.count(kw) for kw in keywords)
-            if theme_score >= 2:
-                detected_themes.append(theme)
-
-        if not detected_themes:
-            detected_themes = ['人生感悟']
-
-        self.series_context['genre_detected'] = best_genre
-        self.series_context['main_themes'] = detected_themes
-
-        print(f"🎭 检测到剧情类型: {best_genre}")
-        print(f"🎯 主要主题: {', '.join(detected_themes)}")
-
-        return best_genre, detected_themes
+        try:
+            response = self.call_ai_api(prompt, "你是专业的影视内容分析师，擅长识别剧情类型和主题。")
+            if response:
+                # 解析AI响应
+                if "```json" in response:
+                    start = response.find("```json") + 7
+                    end = response.find("```", start)
+                    json_text = response[start:end]
+                else:
+                    start = response.find("{")
+                    end = response.rfind("}") + 1
+                    json_text = response[start:end]
+                
+                result = json.loads(json_text)
+                genre = result.get('genre', '通用剧')
+                themes = result.get('themes', ['剧情发展'])
+                
+                print(f"🎭 AI识别剧情类型: {genre}")
+                print(f"🎯 AI识别主题: {', '.join(themes)}")
+                
+                self.series_context['genre_detected'] = genre
+                self.series_context['main_themes'] = themes
+                
+                return genre, themes
+                
+        except Exception as e:
+            print(f"⚠️ AI类型识别失败: {e}")
+        
+        # AI失败时返回默认值
+        return '通用剧', ['剧情发展']
 
     def build_series_context(self, episode_num: str) -> str:
         """构建全剧上下文信息 - 问题4,8：跨集连贯性"""
@@ -785,6 +803,43 @@ class CompleteIntelligentTVClipper:
         except Exception as e:
             print(f"⚠️ AI分析过程出错: {e}")
             return None
+
+    def _select_representative_subtitles(self, subtitles: List[Dict]) -> str:
+        """选择代表性字幕用于AI分析，避免token超限"""
+        if not subtitles:
+            return ""
+        
+        total_length = len(subtitles)
+        
+        # 选择策略：开头、中间、结尾各选一些
+        segments = []
+        
+        # 开头15%
+        start_end = max(1, int(total_length * 0.15))
+        segments.extend(subtitles[:start_end])
+        
+        # 中间20%
+        mid_start = int(total_length * 0.4)
+        mid_end = int(total_length * 0.6)
+        segments.extend(subtitles[mid_start:mid_end])
+        
+        # 结尾15%
+        end_start = int(total_length * 0.85)
+        segments.extend(subtitles[end_start:])
+        
+        # 合并文本，限制总长度
+        representative_parts = []
+        total_chars = 0
+        max_chars = 8000  # 限制在合理范围内
+        
+        for subtitle in segments:
+            text = subtitle['text']
+            if total_chars + len(text) > max_chars:
+                break
+            representative_parts.append(f"[{subtitle['start']}] {text}")
+            total_chars += len(text)
+        
+        return '\n'.join(representative_parts)
 
     def _get_genre_specific_guidance(self, genre: str) -> str:
         """根据剧情类型提供特定指导"""
@@ -1393,8 +1448,8 @@ class CompleteIntelligentTVClipper:
                         '-y'
                     ]
 
-                # 执行命令
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                # 执行命令，增强编码处理
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, encoding='utf-8', errors='replace')
 
                 if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1024:
                     file_size = os.path.getsize(output_path) / (1024*1024)
@@ -1566,8 +1621,12 @@ class CompleteIntelligentTVClipper:
                 print(f"❌ 字幕解析失败")
                 return None
 
-            # 3. 识别剧情类型和主题
-            genre, themes = self.detect_genre_and_themes(subtitles)
+            # 3. 使用AI识别剧情类型和主题
+            genre, themes = self.detect_genre_and_themes_ai(subtitles)
+            
+            if not genre or not themes:
+                print("❌ AI类型识别失败，无法继续处理")
+                return None
 
             # 4. 构建剧集上下文
             series_context = self.build_series_context(episode_num)
