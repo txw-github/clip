@@ -133,11 +133,29 @@ class CompleteIntelligentTVClipper:
             return False
 
     def configure_ai_interactive(self):
-        """交互式AI配置"""
-        print("\n🤖 AI配置向导")
+        """智能AI配置检查"""
+        print("\n🤖 AI配置检查")
         print("=" * 50)
 
-        print("选择AI接口类型:")
+        # 检查是否已有有效配置
+        if self.ai_config.get('enabled') and self.ai_config.get('api_key'):
+            print("✅ 发现已有AI配置:")
+            print(f"   服务商: {self.ai_config.get('provider', '未知')}")
+            print(f"   模型: {self.ai_config.get('model', '未知')}")
+            if self.ai_config.get('base_url'):
+                print(f"   地址: {self.ai_config['base_url']}")
+            print(f"   密钥: {self.ai_config.get('api_key', '')[:10]}...")
+            
+            # 测试连接
+            print("\n🔍 测试连接...")
+            if self._test_existing_config():
+                print("✅ AI配置正常，直接使用")
+                return
+            else:
+                print("⚠️ 连接测试失败")
+        
+        # 如果没有配置或配置无效，才进行交互式配置
+        print("\n需要配置AI接口:")
         print("1. 🔒 官方API (Google Gemini等)")
         print("2. 🌐 中转API (ChatAI, OpenRouter等)")
         print("3. 🚫 跳过配置")
@@ -246,6 +264,18 @@ class CompleteIntelligentTVClipper:
             return bool(completion.choices[0].message.content)
         except Exception as e:
             print(f"❌ 测试失败: {e}")
+            return False
+
+    def _test_existing_config(self) -> bool:
+        """测试已有配置的连接"""
+        try:
+            api_type = self.ai_config.get('api_type')
+            if api_type == 'official':
+                return self._test_official_api(self.ai_config)
+            else:
+                return self._test_proxy_api(self.ai_config)
+        except Exception as e:
+            print(f"❌ 配置测试失败: {e}")
             return False
 
     def test_current_connection(self):
@@ -1990,7 +2020,13 @@ class CompleteIntelligentTVClipper:
 def main():
     """主函数 - 问题9：集成到clean_main"""
     clipper = CompleteIntelligentTVClipper()
-    clipper.configure_ai_interactive() # new
+    
+    # 只有在没有有效配置时才进行交互式配置
+    if not clipper.ai_config.get('enabled') or not clipper.ai_config.get('api_key'):
+        clipper.configure_ai_interactive()
+    else:
+        print("✅ 使用已有AI配置")
+    
     clipper.process_all_episodes()
 
 if __name__ == "__main__":
