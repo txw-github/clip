@@ -8,7 +8,7 @@ channel = "stable-25_05"
 run = ["sh", "-c", "python main.py"]
 
 [workflows]
-runButton = "Run Complete System"
+runButton = "Run Movie AI Clipper"
 
 [[workflows.workflow]]
 name = "Run Complete System"
@@ -18,3 +18,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python start_plot_clipper.py"
+
+[[workflows.workflow]]
+name = "Run Movie AI Clipper"
+author = 46204220
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python start_movie_ai_clipper.py"
