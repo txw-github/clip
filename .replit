@@ -8,7 +8,7 @@ channel = "stable-25_05"
 run = ["sh", "-c", "python main.py"]
 
 [workflows]
-runButton = "Run Complete Intelligent System"
+runButton = "Run Complete Video System"
 
 [[workflows.workflow]]
 name = "Run Complete System"
@@ -36,3 +36,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python start_complete_intelligent_system.py"
+
+[[workflows.workflow]]
+name = "Run Complete Video System"
+author = 46204220
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python start_complete_video_system.py"
