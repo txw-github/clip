@@ -2004,8 +2004,17 @@ def main():
                 input("\n处理完成，按回车键返回主菜单...")
                 
             elif choice == '2':
-                # 电影AI剪辑
-                print("\n🎬 启动电影AI分析和剪辑系统...")
+                # 电影AI剪辑 - 增强版
+                print("\n🎬 启动电影AI分析和剪辑系统 - 增强版")
+                print("=" * 60)
+                print("🔧 增强功能说明:")
+                print("• 问题9解决：第一人称叙述与视频内容精确同步")
+                print("• 问题10解决：AI分析结果智能缓存，避免重复API调用")
+                print("• 问题11解决：相同分析多次剪辑结果完全一致")
+                print("• 智能错别字修正 (防衛→防卫, 正當→正当)")
+                print("• 无声视频专为第一人称叙述设计")
+                print("=" * 60)
+                
                 movie_clipper = MovieAIClipper()
                 if not movie_clipper.ai_config.get('enabled'):
                     print("❌ AI未配置，无法进行电影分析")
@@ -2029,14 +2038,23 @@ def main():
                     input("按回车键继续...")
                     continue
                 
-                print("🎬 开始电影AI分析和剪辑...")
-                print("📋 特色功能:")
-                print("  • 无声视频剪辑，专为第一人称叙述设计")
-                print("  • 智能错别字修正 (防衛→防卫, 正當→正当)")
-                print("  • 第一人称叙述与视频内容实时同步")
+                print("\n🚀 开始电影AI分析和剪辑...")
                 
-                movie_clipper.process_all_movies()
-                input("\n电影处理完成，按回车键返回主菜单...")
+                try:
+                    movie_clipper.process_all_movies()
+                    print("\n🎉 电影处理完成！")
+                    print("📁 输出目录：")
+                    print(f"  • 视频片段: movie_clips/")
+                    print(f"  • 第一人称字幕: movie_clips/*_第一人称叙述.srt") 
+                    print(f"  • 剪辑方案: movie_analysis/*_AI剪辑方案.txt")
+                    print(f"  • 缓存数据: ai_cache/")
+                    
+                except Exception as e:
+                    print(f"\n❌ 电影处理过程出错: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
+                input("\n按回车键返回主菜单...")
                 
             elif choice == '3':
                 clipper.test_current_connection()
