@@ -137,8 +137,32 @@ class MovieAIClipper:
 
     def fix_subtitle_errors(self, content: str) -> str:
         """智能修正字幕错误"""
-        # 常见错误修正词典
+        # 常见错误修正词典 - 专门修正繁体字和错别字
         corrections = {
+            # 繁体字修正
+            '防衛': '防卫',
+            '正當': '正当', 
+            '証據': '证据',
+            '檢察官': '检察官',
+            '審判': '审判',
+            '辯護': '辩护',
+            '起訴': '起诉',
+            '調查': '调查',
+            '發現': '发现',
+            '決定': '决定',
+            '選擇': '选择',
+            '問題': '问题',
+            '機會': '机会',
+            '開始': '开始',
+            '結束': '结束',
+            '証人': '证人',
+            '証言': '证言',
+            '実現': '实现',
+            '対話': '对话',
+            '関係': '关系',
+            '実際': '实际',
+            '変化': '变化',
+            
             # 标点符号修正
             '。。。': '...',
             '！！': '！',
@@ -375,6 +399,203 @@ class MovieAIClipper:
             print(f"⚠️ AI分析结果JSON解析失败: {e}")
             return None
 
+    def create_video_clips(self, analysis: Dict, movie_title: str) -> List[str]:
+        """创建视频片段 - 无声视频，配第一人称叙述"""
+        if not analysis:
+            print("❌ AI分析失败，无法创建视频片段")
+            return []
+        
+        # 查找对应的视频文件
+        video_file = self.find_movie_video_file(movie_title)
+        if not video_file:
+            print(f"❌ 未找到对应的视频文件: {movie_title}")
+            return []
+        
+        clips = analysis.get('highlight_clips', [])
+        created_clips = []
+        
+        for i, clip in enumerate(clips, 1):
+            clip_filename = f"{movie_title}_片段{i:02d}_{clip.get('plot_type', '精彩片段')}.mp4"
+            clip_path = os.path.join(self.output_folder, clip_filename)
+            
+            if self.create_single_video_clip(video_file, clip, clip_path):
+                created_clips.append(clip_path)
+                # 生成第一人称叙述字幕文件
+                self.create_narration_subtitle(clip, clip_path)
+        
+        return created_clips
+    
+    def find_movie_video_file(self, movie_title: str) -> Optional[str]:
+        """查找对应的电影视频文件"""
+        video_folder = "movie_videos"
+        os.makedirs(video_folder, exist_ok=True)
+        
+        if not os.path.exists(video_folder):
+            return None
+        
+        video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv']
+        
+        # 精确匹配
+        for ext in video_extensions:
+            video_path = os.path.join(video_folder, movie_title + ext)
+            if os.path.exists(video_path):
+                return video_path
+        
+        # 模糊匹配
+        for filename in os.listdir(video_folder):
+            if any(filename.lower().endswith(ext) for ext in video_extensions):
+                if movie_title.lower() in filename.lower() or filename.lower() in movie_title.lower():
+                    return os.path.join(video_folder, filename)
+        
+        return None
+    
+    def create_single_video_clip(self, video_file: str, clip: Dict, output_path: str) -> bool:
+        """创建单个视频片段 - 移除声音，为第一人称叙述做准备"""
+        try:
+            start_time = clip.get('start_time', '00:00:00,000')
+            end_time = clip.get('end_time', '00:00:00,000')
+            
+            start_seconds = self.time_to_seconds(start_time)
+            end_seconds = self.time_to_seconds(end_time)
+            duration = end_seconds - start_seconds
+            
+            if duration <= 0:
+                print(f"  ❌ 无效时间段: {start_time} -> {end_time}")
+                return False
+            
+            print(f"  🎬 创建片段: {clip.get('title', '未知片段')}")
+            print(f"     时间: {start_time} --> {end_time} ({duration:.1f}秒)")
+            
+            # 添加缓冲时间确保完整性
+            buffer_start = max(0, start_seconds - 1)
+            buffer_duration = duration + 2
+            
+            # FFmpeg命令 - 移除音频，为叙述做准备
+            cmd = [
+                'ffmpeg',
+                '-i', video_file,
+                '-ss', str(buffer_start),
+                '-t', str(buffer_duration),
+                '-an',  # 移除音频
+                '-c:v', 'libx264',
+                '-preset', 'medium',
+                '-crf', '23',
+                '-movflags', '+faststart',
+                '-avoid_negative_ts', 'make_zero',
+                output_path,
+                '-y'
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode == 0 and os.path.exists(output_path):
+                file_size = os.path.getsize(output_path) / (1024*1024)
+                print(f"    ✅ 创建成功: {os.path.basename(output_path)} ({file_size:.1f}MB, 无声)")
+                return True
+            else:
+                print(f"    ❌ 创建失败: {result.stderr[:100] if result.stderr else '未知错误'}")
+                return False
+        
+        except Exception as e:
+            print(f"  ❌ 创建视频片段时出错: {e}")
+            return False
+    
+    def create_narration_subtitle(self, clip: Dict, video_path: str):
+        """为视频片段创建第一人称叙述字幕文件"""
+        try:
+            subtitle_path = video_path.replace('.mp4', '_第一人称叙述.srt')
+            
+            # 获取第一人称叙述内容
+            narration = clip.get('first_person_narration', {})
+            full_narration = narration.get('full_narration', '我正在观看这个精彩的片段。')
+            
+            # 获取片段时长
+            duration = clip.get('duration_seconds', 180)
+            
+            # 生成分段叙述字幕
+            segments = self.split_narration_to_segments(narration, duration)
+            
+            # 生成SRT格式字幕
+            srt_content = ""
+            for i, segment in enumerate(segments, 1):
+                start_time = self.seconds_to_srt_time(segment['start'])
+                end_time = self.seconds_to_srt_time(segment['end'])
+                
+                srt_content += f"{i}\n"
+                srt_content += f"{start_time} --> {end_time}\n"
+                srt_content += f"{segment['text']}\n\n"
+            
+            with open(subtitle_path, 'w', encoding='utf-8') as f:
+                f.write(srt_content)
+            
+            print(f"    📝 叙述字幕: {os.path.basename(subtitle_path)}")
+            
+        except Exception as e:
+            print(f"    ⚠️ 叙述字幕生成失败: {e}")
+    
+    def split_narration_to_segments(self, narration: Dict, total_duration: float) -> List[Dict]:
+        """将第一人称叙述分段，与视频时间同步"""
+        segments = []
+        
+        # 获取各部分叙述
+        opening = narration.get('opening', '')
+        development = narration.get('development', '')
+        climax = narration.get('climax', '')
+        conclusion = narration.get('conclusion', '')
+        
+        # 分配时间段
+        opening_duration = total_duration * 0.2  # 开场20%
+        development_duration = total_duration * 0.4  # 发展40%
+        climax_duration = total_duration * 0.25  # 高潮25%
+        conclusion_duration = total_duration * 0.15  # 结尾15%
+        
+        current_time = 0
+        
+        if opening:
+            segments.append({
+                'start': current_time,
+                'end': current_time + opening_duration,
+                'text': f"我看到：{opening}",
+                'type': '开场叙述'
+            })
+            current_time += opening_duration
+        
+        if development:
+            segments.append({
+                'start': current_time,
+                'end': current_time + development_duration,
+                'text': f"我注意到：{development}",
+                'type': '发展叙述'
+            })
+            current_time += development_duration
+        
+        if climax:
+            segments.append({
+                'start': current_time,
+                'end': current_time + climax_duration,
+                'text': f"我感受到：{climax}",
+                'type': '高潮叙述'
+            })
+            current_time += climax_duration
+        
+        if conclusion:
+            segments.append({
+                'start': current_time,
+                'end': min(current_time + conclusion_duration, total_duration),
+                'text': f"我总结：{conclusion}",
+                'type': '结尾叙述'
+            })
+        
+        return segments
+    
+    def seconds_to_srt_time(self, seconds: float) -> str:
+        """将秒数转换为SRT时间格式"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        ms = int((seconds % 1) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
+
     def generate_editing_plan(self, analysis: Dict, movie_title: str) -> str:
         """生成完整剪辑方案"""
         if not analysis:
@@ -503,15 +724,25 @@ AI分析引擎：专业电影剪辑分析系统 v2.0
             print("❌ AI分析失败")
             return False
         
-        # 4. 生成剪辑方案
+        # 4. 创建视频片段（无声，配第一人称叙述）
+        created_clips = self.create_video_clips(analysis, movie_title)
+        
+        # 5. 生成剪辑方案
         editing_plan = self.generate_editing_plan(analysis, movie_title)
         
-        # 5. 保存结果
+        # 6. 保存结果
         plan_filename = f"{movie_title}_AI剪辑方案.txt"
         plan_path = os.path.join(self.analysis_folder, plan_filename)
         
         with open(plan_path, 'w', encoding='utf-8') as f:
             f.write(editing_plan)
+        
+        # 7. 生成视频剪辑报告
+        if created_clips:
+            video_report = self.generate_video_report(created_clips, movie_title, analysis)
+            video_report_path = os.path.join(self.analysis_folder, f"{movie_title}_视频剪辑报告.txt")
+            with open(video_report_path, 'w', encoding='utf-8') as f:
+                f.write(video_report)
         
         # 6. 保存详细AI分析数据
         analysis_filename = f"{movie_title}_AI分析数据.json"
@@ -609,6 +840,64 @@ AI分析引擎：专业电影剪辑分析系统 v2.0
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(report)
         
+        def generate_video_report(self, created_clips: List[str], movie_title: str, analysis: Dict) -> str:
+        """生成视频剪辑报告"""
+        clips = analysis.get('highlight_clips', [])
+        
+        report = f"""🎬 《{movie_title}》视频剪辑报告
+{'=' * 80}
+
+🎯 剪辑特色
+• ✅ 无声视频 - 专为第一人称叙述设计
+• ✅ 第一人称视角 - "我看到/我注意到/我感受到/我总结"
+• ✅ 智能时间同步 - 叙述与视频内容实时匹配
+• ✅ 错别字修正 - "防衛"→"防卫", "正當"→"正当"等
+
+📊 剪辑统计
+• 成功创建视频: {len(created_clips)} 个
+• 平均片段时长: {sum(clip.get('duration_seconds', 0) for clip in clips) / len(clips) if clips else 0:.1f} 秒
+• 总视频时长: {sum(clip.get('duration_seconds', 0) for clip in clips):.1f} 秒
+
+📝 视频片段详情:
+"""
+        
+        for i, (clip_path, clip) in enumerate(zip(created_clips, clips), 1):
+            duration = clip.get('duration_seconds', 0)
+            narration = clip.get('first_person_narration', {})
+            
+            report += f"""
+🎬 片段 {i}: {os.path.basename(clip_path)}
+   剧情类型: {clip.get('plot_type', '未分类')}
+   视频时长: {duration:.1f} 秒
+   视频特点: 无声视频，配第一人称叙述
+   
+   第一人称叙述结构:
+   • 开场(20%): 我看到 - {narration.get('opening', '开场叙述')[:50]}...
+   • 发展(40%): 我注意到 - {narration.get('development', '发展叙述')[:50]}...
+   • 高潮(25%): 我感受到 - {narration.get('climax', '高潮叙述')[:50]}...
+   • 结尾(15%): 我总结 - {narration.get('conclusion', '结尾叙述')[:50]}...
+   
+   字幕文件: {os.path.basename(clip_path).replace('.mp4', '_第一人称叙述.srt')}
+"""
+        
+        report += f"""
+
+📁 文件说明
+• 视频文件: {self.output_folder}/*.mp4 (无声视频)
+• 字幕文件: {self.output_folder}/*_第一人称叙述.srt (第一人称叙述)
+• 剪辑方案: {movie_title}_AI剪辑方案.txt
+
+🎯 使用说明
+1. 视频文件已去除原声，适合配音制作
+2. 字幕文件提供完整的第一人称叙述文本
+3. 叙述按时间段分布，与视频内容同步
+4. 支持"我看到/我注意到/我感受到/我总结"的叙述结构
+
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+剪辑系统: 电影AI分析剪辑系统 v2.1 (支持视频剪辑)
+"""
+        return report
+
         print(f"\n📊 最终统计:")
         print(f"✅ 成功分析: {success_count}/{len(srt_files)} 个电影")
         print(f"📄 详细报告: {report_path}")

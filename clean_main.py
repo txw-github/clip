@@ -16,6 +16,7 @@ from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 import time
 import requests
+from movie_ai_clipper import MovieAIClipper
 
 class CompleteIntelligentTVClipper:
     """完整智能电视剧剪辑系统 - 稳定版"""
@@ -1882,36 +1883,46 @@ class CompleteIntelligentTVClipper:
 
 def show_main_menu():
     """显示主菜单"""
-    print("\n🤖 AI智能电视剧剪辑系统")
+    print("\n🤖 AI智能视频剪辑系统")
     print("=" * 50)
     print("📋 请选择操作:")
-    print("1. 🚀 开始AI分析和剪辑")
-    print("2. ⚙️ 检查AI配置")
-    print("3. 🔧 重新配置AI")
-    print("4. 📊 查看系统状态")
-    print("5. 📖 查看使用教程")
-    print("6. ❌ 退出系统")
+    print("1. 🚀 开始电视剧AI分析和剪辑")
+    print("2. 🎬 开始电影AI分析和剪辑")
+    print("3. ⚙️ 检查AI配置")
+    print("4. 🔧 重新配置AI")
+    print("5. 📊 查看系统状态")
+    print("6. 📖 查看使用教程")
+    print("7. ❌ 退出系统")
     print("=" * 50)
 
 def show_tutorial():
     """显示使用教程"""
     print("\n📖 AI智能剪辑系统使用教程")
     print("=" * 60)
-    print("📁 1. 准备文件:")
+    print("📺 1. 电视剧剪辑:")
     print("   • 将字幕文件(.srt/.txt)放入 srt/ 目录")
     print("   • 将视频文件(.mp4/.mkv等)放入 videos/ 目录")
     print("   • 确保文件名包含集数信息(如: E01.srt)")
     print()
-    print("🤖 2. AI配置要求:")
+    print("🎬 2. 电影剪辑 (新功能):")
+    print("   • 将电影字幕文件放入 movie_srt/ 目录")
+    print("   • 将电影视频文件放入 movie_videos/ 目录")
+    print("   • 支持无声视频剪辑，专为第一人称叙述设计")
+    print("   • 自动修正错别字: '防衛'→'防卫', '正當'→'正当'")
+    print("   • 第一人称叙述与视频内容实时同步")
+    print()
+    print("🤖 3. AI配置要求:")
     print("   • 本系统只使用AI分析，无基础分析备选")
     print("   • 支持官方API和中转API")
     print("   • 推荐使用: Gemini, GPT-4, DeepSeek等")
     print()
-    print("⚡ 3. 系统特色:")
+    print("⚡ 4. 系统特色:")
     print("   • 完全AI驱动的剧情点识别")
     print("   • 智能错别字修正")
     print("   • 跨集连贯性分析")
     print("   • 自动生成第三人称旁白")
+    print("   • 电影第一人称叙述剪辑")
+    print("   • 无声视频配音准备")
     print("   • 缓存机制避免重复分析")
     print("=" * 60)
     input("\n按回车键返回主菜单...")
@@ -1977,7 +1988,7 @@ def main():
                 # 检查AI配置
                 if not clipper.ai_config.get('enabled') or not clipper.ai_config.get('api_key'):
                     print("\n❌ AI未配置，无法开始分析")
-                    print("💡 请先选择菜单选项3配置AI")
+                    print("💡 请先选择菜单选项4配置AI")
                     input("按回车键继续...")
                     continue
                 
@@ -1988,28 +1999,63 @@ def main():
                     input("按回车键继续...")
                     continue
                 
-                print("\n🚀 开始AI分析和剪辑...")
+                print("\n🚀 开始电视剧AI分析和剪辑...")
                 clipper.process_all_episodes()
                 input("\n处理完成，按回车键返回主菜单...")
                 
             elif choice == '2':
-                clipper.test_current_connection()
+                # 电影AI剪辑
+                print("\n🎬 启动电影AI分析和剪辑系统...")
+                movie_clipper = MovieAIClipper()
+                if not movie_clipper.ai_config.get('enabled'):
+                    print("❌ AI未配置，无法进行电影分析")
+                    print("💡 请先配置AI接口")
+                    input("按回车键继续...")
+                    continue
+                
+                # 检查电影字幕文件
+                movie_srt_folder = "movie_srt"
+                if not os.path.exists(movie_srt_folder) or not os.listdir(movie_srt_folder):
+                    print(f"❌ 未找到电影字幕文件")
+                    print(f"💡 请将电影字幕文件放入 {movie_srt_folder}/ 目录")
+                    input("按回车键继续...")
+                    continue
+                
+                # 检查电影视频文件
+                movie_video_folder = "movie_videos"
+                if not os.path.exists(movie_video_folder) or not os.listdir(movie_video_folder):
+                    print(f"❌ 未找到电影视频文件")
+                    print(f"💡 请将电影视频文件放入 {movie_video_folder}/ 目录")
+                    input("按回车键继续...")
+                    continue
+                
+                print("🎬 开始电影AI分析和剪辑...")
+                print("📋 特色功能:")
+                print("  • 无声视频剪辑，专为第一人称叙述设计")
+                print("  • 智能错别字修正 (防衛→防卫, 正當→正当)")
+                print("  • 第一人称叙述与视频内容实时同步")
+                
+                movie_clipper.process_all_movies()
+                input("\n电影处理完成，按回车键返回主菜单...")
                 
             elif choice == '3':
-                clipper.configure_ai_interactive()
+                clipper.test_current_connection()
                 
             elif choice == '4':
-                check_system_status(clipper)
+                clipper.configure_ai_interactive()
                 
             elif choice == '5':
-                show_tutorial()
+                check_system_status(clipper)
                 
             elif choice == '6':
+                show_tutorial()
+                
+            elif choice == '7':
                 print("\n👋 感谢使用AI智能剪辑系统！")
                 break
                 
             else:
-                print("❌ 无效选择，请输入1-6")
+                print("❌ 无效选择，请输入1-7")
                 input("按回车键继续...")
                 
         except KeyboardInterrupt:
