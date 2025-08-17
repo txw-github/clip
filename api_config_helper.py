@@ -147,6 +147,8 @@ class ConfigHelper:
         """测试Gemini官方API"""
         try:
             from google import genai
+
+            # 官方方式创建客户端
             client = genai.Client(api_key=config['api_key'])
             response = client.models.generate_content(
                 model=config['model'], 
@@ -208,9 +210,14 @@ class ConfigHelper:
         """调用Gemini官方API"""
         try:
             from google import genai
+
+            # 官方方式创建客户端
             client = genai.Client(api_key=config['api_key'])
 
+            # 组合提示词
             full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+
+            # 生成内容
             response = client.models.generate_content(
                 model=config['model'], 
                 contents=full_prompt
