@@ -1,0 +1,117 @@
+我需要用网上的大模型接口。官网API和中转API都可能有相同模型，区别是一个有url一个没有，这个需要用户选择
+中转大模型调用方式：
+给你提供一些我的大模型api调用代码示例：代码使用教程：
+python调用代码-Open的普通问答调用格式
+import requests
+import json
+# 使用中转大模型调用方式：链接可以和特定的API可以不必向openai/anthropic发起请求，且请求无须魔法
+# 支持其他模型，已接入Claude,
+# 调用方式与openai官网一致，仅需修改baseurl
+Baseurl = "https://www.chataiapi.com/v1"
+Skey = "sk-xxxx这里输入你的令牌"
+payload = json.dumps({
+    "model": "claude-3-5-sonnet-20240620",
+    "messages": [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant."
+        },
+        {
+            "role": "user",
+            "content": "hello"
+        }
+    ]
+})
+url = Baseurl + "/v1/chat/completions"
+headers = {
+    'Accept': 'application/json',
+    'Authorization': f'Bearer {Skey}',
+    'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
+    'Content-Type': 'application/json'
+}
+
+response = requests.request("POST", url, headers=headers, data=payload)
+
+# 解析 JSON 数据为 Python 字典
+data = response.json()
+
+# 获取 content 字段的值
+content = data
+
+print(content)
+
+下面是Open的上传图片调用代码
+
+from openai import OpenAI
+
+client = OpenAI(
+    # 输入转发API Key
+    api_key="sk-xxxx",
+    base_url="https://www.chataiapi.com/v1"
+)
+
+response = client.chat.completions.create(
+    model="模型名字",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "介绍一下这张图"},
+                {
+                    "type": "image_url",
+                    "image_url": "https://图片地址.jpg",
+                },
+            ],
+        }
+    ],
+    max_tokens=300,
+    stream=False  # # 是否开启流式输出
+)
+# 非流式输出获取结果
+print(response.choices[0].message)
+# 流式输出获取结果
+# for chunk in response:
+#     print(chunk.choices[0].delta)
+
+如果非网络图片上传是本地图片 
+请替换 "image_url": "https://图片地址.jpg" 为 
+"image url":{"url": f"data:image/png;base64,fencoded image}"}
+此处为你实际的图片
+
+第二个：
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="sk-CU2KOpYc3LK5",
+    base_url="https://www.chataiapi.com/v1",
+)
+
+completion = client.chat.completions.create(
+    model="deepseek-r1",  # 此处以 deepseek-r1 为例，可按需更换模型名称。
+    messages=[{"role": "user", "content": "9.9和9.11谁大"}],
+)
+
+# 通过reasoning_content字段打印思考过程
+print("思考过程：")
+print(completion.choices[0].message.reasoning_content)
+
+# 通过content字段打印最终答案
+print("最终答案：")
+print(completion.choices[0].message.conte
+
+官网大模型API，如遇overload报错是谷歌官方服务器负载，只能等恢复~
+403报错是死key了，售后7天内可以找我补~
+429报错是你选错模型了，gemini-2.5-pro/gemini-2.5-flash目前只有这两个
+
+gemini官网方式：
+geminin的方式如下：from google import genai
+
+client = genai.Client(api_key="YOUR_API_KEY")
+
+response = client.models.generate_content(
+model="gemini-2.5-flash", contents="Explain how AI works in a few words"
+)
+print(response.text)
+
+
+结合上述内容，把内容优化下，全部集成在main中，方法要尽可能精简简洁的引导用户使用
