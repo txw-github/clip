@@ -89,3 +89,80 @@ if __name__ == '__main__':
         os.makedirs('templates')
     
     app.run(host='0.0.0.0', port=5000, debug=True)
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Web界面 - 电视剧剪辑系统的Web前端
+"""
+
+import os
+import json
+from flask import Flask, render_template, request, jsonify, send_file
+from subtitle_analyzer import IntelligentSubtitleAnalyzer
+
+app = Flask(__name__)
+
+class WebInterface:
+    def __init__(self):
+        self.analyzer = IntelligentSubtitleAnalyzer()
+        
+    def get_available_files(self):
+        """获取可用的字幕文件"""
+        files = []
+        for file in os.listdir('.'):
+            if file.endswith('.txt') and any(pattern in file.lower() for pattern in ['e', 's01e', '第', '集']):
+                files.append(file)
+        return sorted(files)
+    
+    def analyze_episode(self, filename):
+        """分析单集"""
+        try:
+            result = self.analyzer.analyze_single_episode(filename)
+            return {'success': True, 'data': result}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+web_interface = WebInterface()
+
+@app.route('/')
+def index():
+    """主页"""
+    files = web_interface.get_available_files()
+    return render_template('index.html', files=files)
+
+@app.route('/api/files')
+def api_files():
+    """获取文件列表API"""
+    files = web_interface.get_available_files()
+    return jsonify({'files': files})
+
+@app.route('/api/analyze', methods=['POST'])
+def api_analyze():
+    """分析文件API"""
+    data = request.get_json()
+    filename = data.get('filename')
+    
+    if not filename:
+        return jsonify({'success': False, 'error': '文件名不能为空'})
+    
+    if not os.path.exists(filename):
+        return jsonify({'success': False, 'error': '文件不存在'})
+    
+    result = web_interface.analyze_episode(filename)
+    return jsonify(result)
+
+@app.route('/api/analyze_all', methods=['POST'])
+def api_analyze_all():
+    """分析所有文件API"""
+    try:
+        from subtitle_analyzer import analyze_all_episodes_intelligently
+        results = analyze_all_episodes_intelligently()
+        return jsonify({'success': True, 'data': results})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+if __name__ == '__main__':
+    print("🌐 启动Web界面...")
+    print("🚀 访问地址: http://0.0.0.0:5000")
+    app.run(host='0.0.0.0', port=5000, debug=True)
