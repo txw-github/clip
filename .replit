@@ -8,7 +8,7 @@ channel = "stable-25_05"
 run = ["sh", "-c", "python main.py"]
 
 [workflows]
-runButton = "后端智能剪辑系统"
+runButton = "启动电影AI分析系统"
 
 [[workflows.workflow]]
 name = "Run Complete System"
@@ -108,3 +108,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python backend_main.py"
+
+[[workflows.workflow]]
+name = "启动电影AI分析系统"
+author = 46531376
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python start_movie_ai_system.py"
