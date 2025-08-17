@@ -8,7 +8,7 @@ channel = "stable-25_05"
 run = ["sh", "-c", "python main.py"]
 
 [workflows]
-runButton = "Run Main System"
+runButton = "后端智能剪辑系统"
 
 [[workflows.workflow]]
 name = "Run Complete System"
@@ -99,3 +99,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python clean_main.py"
+
+[[workflows.workflow]]
+name = "后端智能剪辑系统"
+author = 46524473
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python backend_main.py"
