@@ -199,12 +199,14 @@ class MovieClipperSystem:
     def _test_gemini_api(self, config: Dict) -> bool:
         """测试Gemini官方API"""
         try:
-            from google import genai
-            client = genai.Client(api_key=config['api_key'])
-            response = client.models.generate_content(
-                model=config['model'], 
-                contents="测试"
-            )
+            import google.generativeai as genai
+            
+            # 官方推荐的配置方式
+            genai.configure(api_key=config['api_key'])
+            
+            # 创建模型实例并测试
+            model = genai.GenerativeModel(config['model'])
+            response = model.generate_content("测试")
             return bool(response.text)
         except ImportError:
             print("需要安装: pip install google-generativeai")
@@ -397,13 +399,16 @@ class MovieClipperSystem:
     def _call_gemini_official(self, prompt: str, config: Dict) -> Optional[str]:
         """调用Gemini官方API"""
         try:
-            from google import genai
-            client = genai.Client(api_key=config['api_key'])
+            import google.generativeai as genai
             
-            response = client.models.generate_content(
-                model=config['model'],
-                contents=prompt
-            )
+            # 配置API密钥
+            genai.configure(api_key=config['api_key'])
+            
+            # 创建模型实例
+            model = genai.GenerativeModel(config['model'])
+            
+            # 生成内容
+            response = model.generate_content(prompt)
             return response.text
         except Exception as e:
             print(f"Gemini API调用失败: {e}")
