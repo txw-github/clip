@@ -116,4 +116,4 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python start_movie_ai_system.py"
+args = "python clean_main.py"
