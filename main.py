@@ -37,6 +37,11 @@ class IntelligentTVClipper:
         print(f"📁 字幕目录: {self.srt_folder}/")
         print(f"🎬 视频目录: {self.video_folder}/")
         print(f"📤 输出目录: {self.output_folder}/")
+        print()
+        print("💡 快速开始:")
+        print("   1. 配置AI接口 (支持中转API和官方API)")
+        print("   2. 放入字幕和视频文件")
+        print("   3. 开始智能剪辑")
 
     def load_ai_config(self) -> Dict:
         """加载AI配置"""
@@ -55,17 +60,24 @@ class IntelligentTVClipper:
         return {'enabled': False}
 
     def configure_ai_interactive(self):
-        """交互式AI配置"""
+        """交互式AI配置 - 简化版"""
+        print("\n🤖 AI接口快速配置")
+        print("=" * 40)
+        print("💡 支持多种AI服务:")
+        print("   🌐 中转API: ChatAI, OpenRouter (推荐)")
+        print("   🔒 官方API: Google Gemini, OpenAI, DeepSeek")
+        print()
+        
         from api_config_helper import config_helper
         
         new_config = config_helper.interactive_setup()
         if new_config.get('enabled'):
             self.ai_config = new_config
-            # 保存配置
-            self.save_ai_config(new_config)
-            print("✅ AI配置已更新并保存")
+            print("✅ AI配置成功！")
+            print(f"   服务商: {new_config.get('provider', '未知')}")
+            print(f"   模型: {new_config.get('model', '未知')}")
         else:
-            print("⚠️ AI配置未更新")
+            print("⚠️ AI配置已跳过，将使用基础分析")
 
     
 
@@ -771,15 +783,15 @@ class IntelligentTVClipper:
             print(f"文件状态: 📝{srt_count}个字幕 🎬{video_count}个视频 📤{clips_count}个片段")
 
             print("\n🎯 主要功能:")
-            print("1. 🤖 配置AI接口")
+            print("1. 🤖 配置AI接口 (支持官方/中转API)")
             print("2. 🎬 开始智能剪辑")
-            print("3. 📁 查看详细文件状态")
-            print("4. 📖 查看使用教程")
+            print("3. 📁 查看文件状态")
+            print("4. 📖 使用教程")
             if self.ai_config.get('enabled'):
                 print("5. 🔍 测试AI连接")
-                print("0. ❌ 退出系统")
+                print("0. ❌ 退出")
             else:
-                print("0. ❌ 退出系统")
+                print("0. ❌ 退出")
 
             try:
                 max_choice = "5" if self.ai_config.get('enabled') else "4"
