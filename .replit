@@ -54,3 +54,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python start_stable_system.py"
+
+[[workflows.workflow]]
+name = "Run Movie Subtitle Analysis"
+author = 46204220
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python start_movie_subtitle_clipper.py"
