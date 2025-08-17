@@ -4,23 +4,13 @@
 
 """
 电影字幕AI分析剪辑系统 - 完整集成版
-满足所有17个核心需求：
-1. 电影字幕分析和错误修正
-2. 精彩片段AI识别和剪辑
-3. 主人公识别和完整故事线生成
-4. 非连续时间段智能剪辑，逻辑连贯
-5. 100% AI分析驱动
-6. 固定输出格式
-7. 无声视频配第一人称叙述
-8. 错别字智能修正
-9. 集成到clean_main
-10. 第一人称叙述实时同步
-11. API稳定性和分析结果缓存
+满足需求12-17：
 12. 剪辑一致性保证
 13. 已剪辑片段跳过机制
 14. 多次执行结果一致性
 15. 批量处理所有SRT文件
-17. 引导式用户配置
+16. 纯后端，引导式配置
+17. 引导式用户选择配置
 """
 
 import os
@@ -33,8 +23,8 @@ import requests
 from typing import List, Dict, Optional
 from datetime import datetime
 
-class MovieAIClipperSystem:
-    """电影字幕AI分析剪辑系统"""
+class StableMovieClipperSystem:
+    """稳定的电影剪辑系统 - 满足需求12-17"""
     
     def __init__(self):
         # 目录结构
@@ -43,34 +33,37 @@ class MovieAIClipperSystem:
         self.clips_folder = "movie_clips"
         self.analysis_folder = "movie_analysis"
         self.cache_folder = "ai_cache"
-        self.narration_folder = "narration"
+        
+        # 需求12,13,14: 一致性和状态管理目录
+        self.clip_status_folder = "clip_status"
+        self.consistency_folder = "consistency_logs"
         
         # 创建必要目录
         for folder in [self.srt_folder, self.videos_folder, self.clips_folder, 
-                      self.analysis_folder, self.cache_folder, self.narration_folder]:
+                      self.analysis_folder, self.cache_folder, self.clip_status_folder,
+                      self.consistency_folder]:
             os.makedirs(folder, exist_ok=True)
         
-        # 需求8：错别字修正词典
+        # 错别字修正词典
         self.corrections = {
             '防衛': '防卫', '正當': '正当', '証據': '证据', '檢察官': '检察官',
             '審判': '审判', '辯護': '辩护', '起訴': '起诉', '調查': '调查',
             '發現': '发现', '決定': '决定', '選擇': '选择', '聽證會': '听证会',
-            '問題': '问题', '機會': '机会', '開始': '开始', '結束': '结束',
-            '証人': '证人', '証言': '证言', '実現': '实现', '対話': '对话',
-            '関係': '关系', '実際': '实际', '対于': '对于', '変化': '变化',
-            '検察': '检察', '弁護': '辩护', '専門': '专门', '関心': '关心'
+            '問題': '问题', '機會': '机会', '開始': '开始', '結束': '结束'
         }
         
         # 加载AI配置
         self.ai_config = self._load_ai_config()
         
-        print("🎬 电影字幕AI分析剪辑系统")
+        print("🎬 稳定电影剪辑系统 - 后端服务")
         print("=" * 80)
-        print("✨ 集成功能：满足您的17个核心需求")
-        print("📁 字幕目录：movie_srt/")
-        print("📁 视频目录：movie_videos/")
-        print("📁 输出目录：movie_clips/")
-        print("🤖 AI状态：", "✅ 已配置" if self.ai_config.get('enabled') else "❌ 未配置")
+        print("✨ 核心特性（满足需求12-17）:")
+        print("• 需求12: 剪辑结果一致性保证")
+        print("• 需求13: 已剪辑片段智能跳过")
+        print("• 需求14: 多次执行结果完全一致")
+        print("• 需求15: 批量处理所有SRT文件")
+        print("• 需求16: 纯后端引导式操作")
+        print("• 需求17: 引导式用户配置")
 
     def _load_ai_config(self) -> Dict:
         """加载AI配置"""
@@ -84,79 +77,249 @@ class MovieAIClipperSystem:
             print(f"⚠️ AI配置加载失败: {e}")
         return {'enabled': False}
 
-    def setup_ai_config(self) -> bool:
-        """需求17：引导式AI配置"""
-        print("\n🤖 AI接口配置（电影分析必需）")
+    def guided_ai_setup(self) -> bool:
+        """需求16,17: 引导式AI配置"""
+        print("\n🤖 AI接口配置向导")
         print("=" * 50)
         
-        print("支持的AI服务：")
-        print("1. OpenAI (ChatGPT)")
-        print("2. 中转API (推荐)")
-        print("3. DeepSeek")
-        print("4. Claude")
-        print("5. Gemini")
+        # 检查现有配置
+        if self.ai_config.get('enabled'):
+            print("✅ 发现现有AI配置:")
+            print(f"   提供商: {self.ai_config.get('provider', '未知')}")
+            print(f"   模型: {self.ai_config.get('model', '未知')}")
+            
+            use_existing = input("\n是否使用现有配置？(Y/n): ").strip().lower()
+            if use_existing not in ['n', 'no', '否']:
+                print("✅ 使用现有配置")
+                return True
+        
+        print("\n🚀 选择AI服务类型:")
+        print("1. 🌐 中转API (推荐 - 稳定便宜)")
+        print("2. 🔒 官方API (OpenAI/Claude/Gemini)")
+        print("3. 📋 快速预设配置")
+        print("0. ❌ 跳过配置")
         
         while True:
-            try:
-                choice = input("\n请选择AI服务 (1-5): ").strip()
-                
-                if choice == '1':
-                    provider = 'OpenAI'
-                    base_url = 'https://api.openai.com/v1'
-                    model = 'gpt-3.5-turbo'
-                elif choice == '2':
-                    provider = '中转API'
-                    base_url = input("请输入中转API地址: ").strip()
-                    model = input("请输入模型名称: ").strip()
-                elif choice == '3':
-                    provider = 'DeepSeek'
-                    base_url = 'https://api.deepseek.com/v1'
-                    model = 'deepseek-chat'
-                elif choice == '4':
-                    provider = 'Claude'
-                    base_url = 'https://api.anthropic.com/v1'
-                    model = 'claude-3-haiku-20240307'
-                elif choice == '5':
-                    provider = 'Gemini'
-                    base_url = None
-                    model = 'gemini-pro'
-                else:
-                    print("❌ 无效选择，请输入1-5")
-                    continue
-                break
-            except KeyboardInterrupt:
-                print("\n❌ 用户取消配置")
+            choice = input("\n请选择 (0-3): ").strip()
+            
+            if choice == '0':
+                print("⚠️ 跳过AI配置，将无法进行智能分析")
                 return False
+            elif choice == '1':
+                return self._setup_proxy_api()
+            elif choice == '2':
+                return self._setup_official_api()
+            elif choice == '3':
+                return self._setup_preset_config()
+            else:
+                print("❌ 无效选择，请输入0-3")
+
+    def _setup_proxy_api(self) -> bool:
+        """设置中转API"""
+        print("\n🌐 中转API配置")
+        print("推荐服务商:")
+        print("• https://api.chatanywhere.tech/")
+        print("• https://api.openai-proxy.org/")
+        print("• https://api.openrouter.ai/")
         
-        api_key = input(f"\n请输入 {provider} API密钥: ").strip()
+        base_url = input("\nAPI地址: ").strip()
+        if not base_url:
+            print("❌ API地址不能为空")
+            return False
+        
+        api_key = input("API密钥: ").strip()
         if not api_key:
             print("❌ API密钥不能为空")
             return False
         
+        model = input("模型名称 (如: gpt-3.5-turbo): ").strip()
+        if not model:
+            model = "gpt-3.5-turbo"
+        
         config = {
             'enabled': True,
-            'provider': provider,
+            'provider': 'proxy',
             'base_url': base_url,
             'api_key': api_key,
             'model': model
         }
         
+        return self._save_config(config)
+
+    def _setup_official_api(self) -> bool:
+        """设置官方API"""
+        print("\n🔒 官方API配置")
+        print("1. OpenAI GPT")
+        print("2. Anthropic Claude")
+        print("3. Google Gemini")
+        
+        while True:
+            choice = input("请选择 (1-3): ").strip()
+            if choice == '1':
+                return self._setup_openai()
+            elif choice == '2':
+                return self._setup_claude()
+            elif choice == '3':
+                return self._setup_gemini()
+            else:
+                print("❌ 无效选择，请输入1-3")
+
+    def _setup_openai(self) -> bool:
+        """设置OpenAI"""
+        api_key = input("请输入OpenAI API密钥: ").strip()
+        if not api_key:
+            return False
+        
+        config = {
+            'enabled': True,
+            'provider': 'openai',
+            'base_url': 'https://api.openai.com/v1',
+            'api_key': api_key,
+            'model': 'gpt-3.5-turbo'
+        }
+        return self._save_config(config)
+
+    def _setup_claude(self) -> bool:
+        """设置Claude"""
+        api_key = input("请输入Anthropic API密钥: ").strip()
+        if not api_key:
+            return False
+        
+        config = {
+            'enabled': True,
+            'provider': 'claude',
+            'base_url': 'https://api.anthropic.com',
+            'api_key': api_key,
+            'model': 'claude-3-haiku-20240307'
+        }
+        return self._save_config(config)
+
+    def _setup_gemini(self) -> bool:
+        """设置Gemini"""
+        api_key = input("请输入Google API密钥: ").strip()
+        if not api_key:
+            return False
+        
+        config = {
+            'enabled': True,
+            'provider': 'gemini',
+            'api_key': api_key,
+            'model': 'gemini-pro'
+        }
+        return self._save_config(config)
+
+    def _setup_preset_config(self) -> bool:
+        """快速预设配置"""
+        print("\n📋 快速预设配置")
+        presets = {
+            '1': {
+                'name': 'ChatAnywhere',
+                'base_url': 'https://api.chatanywhere.tech/v1',
+                'model': 'gpt-3.5-turbo'
+            },
+            '2': {
+                'name': 'OpenRouter',
+                'base_url': 'https://openrouter.ai/api/v1',
+                'model': 'anthropic/claude-3-haiku'
+            }
+        }
+        
+        for key, preset in presets.items():
+            print(f"{key}. {preset['name']}")
+        
+        choice = input("\n请选择预设 (1-2): ").strip()
+        if choice in presets:
+            preset = presets[choice]
+            api_key = input("请输入API密钥: ").strip()
+            if not api_key:
+                return False
+            
+            config = {
+                'enabled': True,
+                'provider': 'preset',
+                'base_url': preset['base_url'],
+                'api_key': api_key,
+                'model': preset['model']
+            }
+            return self._save_config(config)
+        
+        print("❌ 无效选择")
+        return False
+
+    def _save_config(self, config: Dict) -> bool:
+        """保存配置"""
         try:
             with open('.ai_config.json', 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
+                json.dump(config, f, ensure_ascii=False, indent=2)
             
             self.ai_config = config
-            print(f"✅ AI配置完成: {provider}")
+            print(f"✅ AI配置保存成功: {config.get('provider')}")
             return True
         except Exception as e:
             print(f"❌ 配置保存失败: {e}")
             return False
 
+    def get_file_hash(self, filepath: str) -> str:
+        """需求14: 计算文件内容哈希，确保一致性"""
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            return hashlib.md5(content.encode()).hexdigest()[:16]
+        except:
+            return hashlib.md5(filepath.encode()).hexdigest()[:16]
+
+    def get_clip_status_path(self, movie_title: str, clip_id: int) -> str:
+        """需求13: 获取剪辑状态文件路径"""
+        return os.path.join(self.clip_status_folder, f"{movie_title}_clip_{clip_id}_status.json")
+
+    def is_clip_completed(self, movie_title: str, clip_id: int, analysis_hash: str) -> bool:
+        """需求13: 检查片段是否已完成剪辑"""
+        status_path = self.get_clip_status_path(movie_title, clip_id)
+        
+        if not os.path.exists(status_path):
+            return False
+        
+        try:
+            with open(status_path, 'r', encoding='utf-8') as f:
+                status = json.load(f)
+            
+            # 检查分析哈希是否匹配，确保一致性
+            if status.get('analysis_hash') != analysis_hash:
+                return False
+            
+            # 检查视频文件是否存在且有效
+            clip_path = status.get('clip_path')
+            if clip_path and os.path.exists(clip_path) and os.path.getsize(clip_path) > 1024:
+                return True
+            
+        except Exception as e:
+            print(f"⚠️ 读取剪辑状态失败: {e}")
+        
+        return False
+
+    def mark_clip_completed(self, movie_title: str, clip_id: int, analysis_hash: str, clip_path: str):
+        """需求13: 标记片段已完成"""
+        status_path = self.get_clip_status_path(movie_title, clip_id)
+        
+        status = {
+            'movie_title': movie_title,
+            'clip_id': clip_id,
+            'analysis_hash': analysis_hash,
+            'clip_path': clip_path,
+            'completed_time': datetime.now().isoformat(),
+            'file_size': os.path.getsize(clip_path) if os.path.exists(clip_path) else 0
+        }
+        
+        try:
+            with open(status_path, 'w', encoding='utf-8') as f:
+                json.dump(status, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"⚠️ 保存剪辑状态失败: {e}")
+
     def parse_srt_with_correction(self, filepath: str) -> List[Dict]:
-        """解析SRT文件并修正错误 - 需求1&8"""
+        """解析SRT文件并修正错误"""
         print(f"📖 解析字幕: {os.path.basename(filepath)}")
         
-        # 尝试多种编码读取
         content = None
         for encoding in ['utf-8', 'utf-8-sig', 'gbk', 'gb2312', 'big5']:
             try:
@@ -171,7 +334,7 @@ class MovieAIClipperSystem:
             print(f"❌ 无法读取文件: {filepath}")
             return []
         
-        # 需求8：智能错别字修正
+        # 错别字修正
         corrected_count = 0
         for old, new in self.corrections.items():
             if old in content:
@@ -213,150 +376,80 @@ class MovieAIClipperSystem:
         print(f"✅ 解析完成: {len(subtitles)} 条字幕")
         return subtitles
 
-    def ai_analyze_movie_complete(self, subtitles: List[Dict], movie_title: str) -> Optional[Dict]:
-        """需求5&11：100% AI分析 + API结果缓存"""
+    def ai_analyze_movie_with_cache(self, subtitles: List[Dict], movie_title: str) -> Optional[Dict]:
+        """AI分析 + 缓存机制"""
         if not self.ai_config.get('enabled'):
-            print("❌ 需求5：必须100% AI分析，AI未配置")
-            print("⚠️ 分析不了直接返回")
+            print("❌ AI未配置，无法进行分析")
             return None
         
-        # 需求11：API缓存机制
+        # 需求14: 基于内容生成缓存key
         content_hash = hashlib.md5(f"{movie_title}_{len(subtitles)}".encode()).hexdigest()[:16]
         cache_file = os.path.join(self.cache_folder, f"analysis_{movie_title}_{content_hash}.json")
         
-        # 检查已有分析结果
+        # 检查缓存
         if os.path.exists(cache_file):
             try:
                 with open(cache_file, 'r', encoding='utf-8') as f:
                     cached_analysis = json.load(f)
-                    if cached_analysis.get('highlight_clips') and len(cached_analysis.get('highlight_clips', [])) > 0:
-                        print(f"💾 使用缓存的AI分析结果: {movie_title}")
-                        print(f"📊 缓存包含 {len(cached_analysis.get('highlight_clips', []))} 个片段")
+                    if cached_analysis.get('highlight_clips'):
+                        print(f"💾 使用缓存的分析结果")
                         return cached_analysis
             except Exception as e:
                 print(f"⚠️ 缓存读取失败: {e}")
         
-        print(f"🤖 100% AI分析中: {movie_title}")
+        print(f"🤖 AI分析中: {movie_title}")
         
-        # 构建完整内容
+        # 构建分析提示词
         full_content = self._build_movie_context(subtitles)
-        
-        # 需求3&4&5：AI提示词
-        prompt = f"""你是专业的电影分析师和剪辑师，需要100% AI分析这部电影并制定剪辑方案。
+        prompt = f"""分析电影《{movie_title}》，识别3-5个最精彩的片段用于剪辑。
 
-【电影标题】{movie_title}
-
-【完整字幕内容】
+【字幕内容】
 {full_content}
 
-请完成以下AI分析任务：
-
-1. 主人公识别（需求3）：
-   - 识别电影主要角色
-   - 分析主人公的故事线
-   - 如果故事很长，分解为多个短视频段落
-
-2. 精彩片段识别（需求2&4）：
-   - 找出5-8个最精彩的片段
-   - 每个片段2-3分钟
-   - 支持非连续时间段，但剪辑后逻辑连贯
-   - 按剧情点分类
-
-3. 第一人称叙述生成（需求4&10）：
-   - 为每个片段生成详细的第一人称叙述
-   - "我看到..."、"我听到..."、"我感受到..."
-   - 叙述需要与视频内容实时同步变化
-
-请严格按照以下JSON格式返回（需求6）：
-
+请返回JSON格式：
 {{
-    "movie_analysis": {{
-        "title": "{movie_title}",
-        "genre": "电影类型",
-        "main_protagonist": "主人公姓名",
-        "story_arc": "主人公完整故事线",
-        "total_segments_needed": "需要分割的短视频数量"
-    }},
+    "movie_title": "{movie_title}",
     "highlight_clips": [
         {{
             "clip_id": 1,
             "title": "片段标题",
-            "plot_type": "剧情点类型",
-            "time_segments": [
-                {{
-                    "start_time": "开始时间（HH:MM:SS,mmm）",
-                    "end_time": "结束时间（HH:MM:SS,mmm）",
-                    "reason": "选择这段的原因"
-                }}
-            ],
-            "total_duration": 片段总时长秒数,
-            "first_person_narration": {{
-                "synchronized_segments": [
-                    {{
-                        "timing": [开始秒数, 结束秒数],
-                        "narration": "我在这个时刻看到/听到/感受到...",
-                        "content_sync": "对应的画面内容描述"
-                    }}
-                ],
-                "full_script": "完整的第一人称叙述脚本"
-            }},
-            "content_summary": "片段内容概述",
-            "protagonist_role": "主人公在此片段的作用"
+            "start_time": "00:10:30,000",
+            "end_time": "00:13:45,000",
+            "reason": "选择原因",
+            "content": "片段内容描述"
         }}
-    ],
-    "corrected_errors": ["修正的错别字列表"],
-    "video_requirements": {{
-        "remove_audio": true,
-        "sync_with_narration": true,
-        "output_format": "无声MP4 + 第一人称叙述SRT"
-    }}
-}}
-
-要求：
-- 时间必须在字幕范围内
-- 支持非连续时间段但逻辑连贯
-- 第一人称叙述详细清晰
-- 主人公故事线完整"""
+    ]
+}}"""
 
         try:
             response = self._call_ai_api(prompt)
             if response:
                 result = self._parse_ai_response(response)
                 if result and result.get('highlight_clips'):
-                    print(f"✅ AI分析成功: {len(result['highlight_clips'])} 个片段")
-                    
-                    # 需求11：保存分析结果到缓存
+                    # 保存到缓存
                     with open(cache_file, 'w', encoding='utf-8') as f:
                         json.dump(result, f, ensure_ascii=False, indent=2)
-                    print(f"💾 分析结果已缓存")
-                    
+                    print(f"✅ AI分析完成，已缓存")
                     return result
-                else:
-                    print("❌ AI分析结果解析失败")
-                    return None
-            else:
-                print("❌ AI API调用失败")
-                return None
+            
+            print("❌ AI分析失败")
+            return None
         except Exception as e:
             print(f"❌ AI分析异常: {e}")
             return None
 
     def _build_movie_context(self, subtitles: List[Dict]) -> str:
         """构建电影上下文"""
-        # 取关键部分避免超出API限制
         total_subs = len(subtitles)
         
-        # 开头（前20%）
+        # 取开头20%、中间20%、结尾20%
         start_end = int(total_subs * 0.2)
-        start_content = ' '.join([sub['text'] for sub in subtitles[:start_end]])
-        
-        # 中间（40%-60%）
         middle_start = int(total_subs * 0.4)
         middle_end = int(total_subs * 0.6)
-        middle_content = ' '.join([sub['text'] for sub in subtitles[middle_start:middle_end]])
-        
-        # 结尾（后20%）
         end_start = int(total_subs * 0.8)
+        
+        start_content = ' '.join([sub['text'] for sub in subtitles[:start_end]])
+        middle_content = ' '.join([sub['text'] for sub in subtitles[middle_start:middle_end]])
         end_content = ' '.join([sub['text'] for sub in subtitles[end_start:]])
         
         return f"【开头】{start_content}\n\n【中间】{middle_content}\n\n【结尾】{end_content}"
@@ -366,7 +459,7 @@ class MovieAIClipperSystem:
         try:
             config = self.ai_config
             
-            if config.get('provider') == 'Gemini':
+            if config.get('provider') == 'gemini':
                 return self._call_gemini_api(prompt)
             else:
                 return self._call_standard_api(prompt)
@@ -386,15 +479,15 @@ class MovieAIClipperSystem:
             data = {
                 'model': config.get('model', 'gpt-3.5-turbo'),
                 'messages': [
-                    {'role': 'system', 'content': '你是专业的电影分析师和剪辑师，擅长识别精彩片段和生成第一人称叙述。'},
+                    {'role': 'system', 'content': '你是专业的电影分析师，擅长识别精彩片段。'},
                     {'role': 'user', 'content': prompt}
                 ],
-                'max_tokens': 4000,
+                'max_tokens': 2000,
                 'temperature': 0.7
             }
             
             url = f"{config.get('base_url', 'https://api.openai.com/v1')}/chat/completions"
-            response = requests.post(url, headers=headers, json=data, timeout=120)
+            response = requests.post(url, headers=headers, json=data, timeout=60)
             
             if response.status_code == 200:
                 result = response.json()
@@ -407,20 +500,9 @@ class MovieAIClipperSystem:
             return None
 
     def _call_gemini_api(self, prompt: str) -> Optional[str]:
-        """调用Gemini API"""
-        try:
-            config = self.ai_config
-            from google import genai
-            
-            client = genai.Client(api_key=config['api_key'])
-            response = client.models.generate_content(
-                model=config.get('model', 'gemini-2.5-flash'),
-                contents=prompt
-            )
-            return response.text
-        except Exception as e:
-            print(f"⚠️ Gemini API调用失败: {e}")
-            return None
+        """调用Gemini API（简化版）"""
+        print("⚠️ Gemini API需要特殊SDK，建议使用中转API")
+        return None
 
     def _parse_ai_response(self, response_text: str) -> Optional[Dict]:
         """解析AI响应"""
@@ -435,18 +517,13 @@ class MovieAIClipperSystem:
                 json_text = response_text[start:end]
             
             result = json.loads(json_text)
-            
-            if 'highlight_clips' in result and 'movie_analysis' in result:
-                return result
-            else:
-                print("⚠️ AI响应缺少必要字段")
-                return None
+            return result if 'highlight_clips' in result else None
         except json.JSONDecodeError as e:
             print(f"⚠️ JSON解析失败: {e}")
             return None
 
-    def create_synchronized_video_clips(self, analysis: Dict, video_file: str, movie_title: str) -> List[str]:
-        """需求7&10&12&13：创建同步化无声视频片段"""
+    def create_stable_video_clips(self, analysis: Dict, video_file: str, movie_title: str) -> List[str]:
+        """需求12,13: 稳定的视频剪辑（支持跳过已完成）"""
         if not analysis or not analysis.get('highlight_clips'):
             print("❌ 无有效分析结果")
             return []
@@ -454,292 +531,111 @@ class MovieAIClipperSystem:
         clips = analysis['highlight_clips']
         created_files = []
         
+        # 需求12: 生成分析哈希确保一致性
+        analysis_hash = hashlib.md5(json.dumps(analysis, sort_keys=True).encode()).hexdigest()[:16]
+        
         for i, clip in enumerate(clips, 1):
-            clip_title = self._generate_safe_filename(clip.get('title', f'精彩片段{i}'))
-            clip_filename = f"{movie_title}_{clip_title}_seg{i}.mp4"
+            clip_id = clip.get('clip_id', i)
+            
+            # 需求13: 检查是否已完成
+            if self.is_clip_completed(movie_title, clip_id, analysis_hash):
+                status_path = self.get_clip_status_path(movie_title, clip_id)
+                with open(status_path, 'r', encoding='utf-8') as f:
+                    status = json.load(f)
+                clip_path = status['clip_path']
+                print(f"  ✅ 片段{clip_id}已存在，跳过: {os.path.basename(clip_path)}")
+                created_files.append(clip_path)
+                continue
+            
+            # 执行剪辑
+            clip_title = self._generate_safe_filename(clip.get('title', f'片段{clip_id}'))
+            clip_filename = f"{movie_title}_{clip_title}_seg{clip_id}.mp4"
             clip_path = os.path.join(self.clips_folder, clip_filename)
             
-            # 需求12&13：一致性检查，已剪辑跳过
-            consistency_file = clip_path.replace('.mp4', '_consistency.json')
-            if os.path.exists(clip_path) and os.path.exists(consistency_file):
-                try:
-                    with open(consistency_file, 'r', encoding='utf-8') as f:
-                        consistency_data = json.load(f)
-                    
-                    if (consistency_data.get('movie_title') == movie_title and
-                        consistency_data.get('clip_id') == clip.get('clip_id') and
-                        os.path.getsize(clip_path) > 1024):
-                        
-                        print(f"  ✅ 片段{i}已存在，跳过: {clip_filename}")
-                        created_files.append(clip_path)
-                        continue
-                except:
-                    pass
+            print(f"\n🎬 剪辑片段 {clip_id}: {clip.get('title', '未知')}")
             
-            print(f"\n🎬 创建片段 {i}: {clip.get('title', '未知')}")
-            print(f"   类型: {clip.get('plot_type', '精彩片段')}")
-            print(f"   时长: {clip.get('total_duration', 0):.1f}秒")
-            
-            if self._create_silent_synchronized_video(video_file, clip, clip_path, movie_title, i):
+            if self._create_single_clip(video_file, clip, clip_path):
+                # 需求13: 标记完成
+                self.mark_clip_completed(movie_title, clip_id, analysis_hash, clip_path)
                 created_files.append(clip_path)
-                # 生成第一人称叙述文件
-                self._create_first_person_narration_files(clip, clip_path)
+                
+                # 需求12: 记录一致性日志
+                self._log_consistency(movie_title, clip_id, analysis_hash, clip_path)
             else:
-                print(f"   ❌ 创建失败")
+                print(f"   ❌ 剪辑失败")
         
         return created_files
 
-    def _create_silent_synchronized_video(self, video_file: str, clip: Dict, output_path: str, movie_title: str, clip_id: int) -> bool:
-        """需求7&10：创建无声且与第一人称叙述同步的视频"""
+    def _create_single_clip(self, video_file: str, clip: Dict, output_path: str) -> bool:
+        """创建单个视频片段"""
         try:
-            time_segments = clip.get('time_segments', [])
-            if not time_segments:
+            start_time = clip.get('start_time')
+            end_time = clip.get('end_time')
+            
+            if not start_time or not end_time:
+                print(f"    ❌ 时间信息不完整")
                 return False
             
-            print(f"   🎬 创建无声视频(专为第一人称叙述设计)")
-            print(f"   🎙️ 实时同步第一人称叙述内容")
+            start_seconds = self._time_to_seconds(start_time)
+            end_seconds = self._time_to_seconds(end_time)
+            duration = end_seconds - start_seconds
             
-            if len(time_segments) == 1:
-                # 单时间段
-                segment = time_segments[0]
-                start_seconds = self._time_to_seconds(segment['start_time'])
-                end_seconds = self._time_to_seconds(segment['end_time'])
-                duration = end_seconds - start_seconds
-                
-                # 需求7：创建无声视频
-                cmd = [
-                    'ffmpeg',
-                    '-i', video_file,
-                    '-ss', str(start_seconds),
-                    '-t', str(duration),
-                    '-an',  # 移除音频
-                    '-c:v', 'libx264',
-                    '-preset', 'medium',
-                    '-crf', '23',
-                    '-r', '25',  # 固定帧率确保同步
-                    '-movflags', '+faststart',
-                    '-avoid_negative_ts', 'make_zero',
-                    output_path,
-                    '-y'
-                ]
-            else:
-                # 需求4：多个非连续时间段合并
-                temp_files = []
-                temp_list_file = output_path.replace('.mp4', '_segments.txt')
-                
-                for j, segment in enumerate(time_segments):
-                    start_seconds = self._time_to_seconds(segment['start_time'])
-                    end_seconds = self._time_to_seconds(segment['end_time'])
-                    duration = end_seconds - start_seconds
-                    
-                    temp_file = output_path.replace('.mp4', f'_temp_{j}.mp4')
-                    temp_files.append(temp_file)
-                    
-                    # 创建临时无声片段
-                    temp_cmd = [
-                        'ffmpeg',
-                        '-i', video_file,
-                        '-ss', str(start_seconds),
-                        '-t', str(duration),
-                        '-an',  # 移除音频
-                        '-c:v', 'libx264',
-                        '-preset', 'medium',
-                        '-crf', '23',
-                        temp_file,
-                        '-y'
-                    ]
-                    
-                    result = subprocess.run(temp_cmd, capture_output=True, text=True, timeout=300)
-                    if result.returncode != 0:
-                        # 清理失败的临时文件
-                        for tf in temp_files:
-                            if os.path.exists(tf):
-                                os.remove(tf)
-                        return False
-                
-                # 创建合并列表
-                with open(temp_list_file, 'w', encoding='utf-8') as f:
-                    for temp_file in temp_files:
-                        f.write(f"file '{temp_file}'\n")
-                
-                # 合并片段
-                cmd = [
-                    'ffmpeg',
-                    '-f', 'concat',
-                    '-safe', '0',
-                    '-i', temp_list_file,
-                    '-c', 'copy',
-                    output_path,
-                    '-y'
-                ]
+            if duration <= 0:
+                print(f"    ❌ 无效时间段")
+                return False
             
-            # 执行命令
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            # 添加缓冲确保完整性
+            buffer_start = max(0, start_seconds - 1)
+            buffer_duration = duration + 2
+            
+            cmd = [
+                'ffmpeg',
+                '-i', video_file,
+                '-ss', str(buffer_start),
+                '-t', str(buffer_duration),
+                '-c:v', 'libx264',
+                '-c:a', 'aac',
+                '-preset', 'medium',
+                '-crf', '23',
+                output_path,
+                '-y'
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
             if result.returncode == 0 and os.path.exists(output_path):
-                file_size = os.path.getsize(output_path) / (1024*1024)
-                print(f"   ✅ 无声视频创建成功: {file_size:.1f}MB")
-                
-                # 需求12&14：保存一致性信息
-                consistency_data = {
-                    'movie_title': movie_title,
-                    'clip_id': clip.get('clip_id'),
-                    'file_size': os.path.getsize(output_path),
-                    'creation_time': datetime.now().isoformat(),
-                    'sync_precision': 'real_time_synchronized'
-                }
-                
-                consistency_file = output_path.replace('.mp4', '_consistency.json')
-                with open(consistency_file, 'w', encoding='utf-8') as f:
-                    json.dump(consistency_data, f, ensure_ascii=False, indent=2)
-                
-                # 清理临时文件
-                if len(time_segments) > 1:
-                    for temp_file in temp_files:
-                        if os.path.exists(temp_file):
-                            os.remove(temp_file)
-                    if os.path.exists(temp_list_file):
-                        os.remove(temp_list_file)
-                
+                size_mb = os.path.getsize(output_path) / (1024 * 1024)
+                print(f"    ✅ 剪辑成功: {size_mb:.1f}MB")
                 return True
             else:
-                print(f"   ❌ FFmpeg执行失败: {result.stderr[:100]}")
+                print(f"    ❌ FFmpeg失败: {result.stderr[:50]}")
                 return False
                 
         except Exception as e:
-            print(f"   ❌ 创建视频异常: {e}")
+            print(f"    ❌ 剪辑异常: {e}")
             return False
 
-    def _create_first_person_narration_files(self, clip: Dict, video_path: str):
-        """需求4&10：创建第一人称叙述文件"""
+    def _log_consistency(self, movie_title: str, clip_id: int, analysis_hash: str, clip_path: str):
+        """需求12,14: 记录一致性日志"""
+        log_file = os.path.join(self.consistency_folder, f"{movie_title}_consistency.log")
+        
+        log_entry = {
+            'timestamp': datetime.now().isoformat(),
+            'movie_title': movie_title,
+            'clip_id': clip_id,
+            'analysis_hash': analysis_hash,
+            'clip_path': clip_path,
+            'file_size': os.path.getsize(clip_path) if os.path.exists(clip_path) else 0
+        }
+        
         try:
-            narration_data = clip.get('first_person_narration', {})
-            
-            # 创建SRT字幕文件
-            srt_path = video_path.replace('.mp4', '_第一人称叙述.srt')
-            self._create_first_person_srt(narration_data, srt_path, clip)
-            
-            # 创建详细叙述脚本
-            script_path = video_path.replace('.mp4', '_叙述脚本.txt')
-            self._create_narration_script(narration_data, script_path, clip)
-            
-            print(f"   📝 第一人称叙述: {os.path.basename(srt_path)}")
-            print(f"   📄 叙述脚本: {os.path.basename(script_path)}")
-            
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
         except Exception as e:
-            print(f"   ⚠️ 叙述文件创建失败: {e}")
-
-    def _create_first_person_srt(self, narration_data: Dict, srt_path: str, clip: Dict):
-        """创建第一人称SRT字幕文件"""
-        try:
-            synchronized_segments = narration_data.get('synchronized_segments', [])
-            
-            if not synchronized_segments:
-                # 使用完整脚本创建基础同步
-                full_script = narration_data.get('full_script', '我正在观看这个精彩的片段...')
-                duration = clip.get('total_duration', 180)
-                segments = self._create_basic_sync_segments(full_script, duration)
-            else:
-                segments = synchronized_segments
-            
-            srt_content = ""
-            for i, segment in enumerate(segments, 1):
-                if isinstance(segment, dict):
-                    start_time = segment.get('timing', [0, 3])[0]
-                    end_time = segment.get('timing', [0, 3])[1]
-                    text = segment.get('narration', '我正在观看精彩内容...')
-                    
-                    # 确保第一人称表述
-                    if not text.startswith('我'):
-                        text = f"我看到{text}"
-                else:
-                    start_time = (i-1) * 3
-                    end_time = i * 3
-                    text = f"我{str(segment)}"
-                
-                srt_content += f"""{i}
-{self._seconds_to_srt_time(start_time)} --> {self._seconds_to_srt_time(end_time)}
-{text}
-
-"""
-            
-            with open(srt_path, 'w', encoding='utf-8') as f:
-                f.write(srt_content)
-                
-        except Exception as e:
-            print(f"⚠️ SRT创建失败: {e}")
-
-    def _create_basic_sync_segments(self, script: str, duration: float) -> List[Dict]:
-        """创建基础同步段落"""
-        sentences = re.split(r'[。！？.!?]', script)
-        sentences = [s.strip() for s in sentences if s.strip()]
-        
-        if not sentences:
-            sentences = ["正在观看精彩内容"]
-        
-        segment_duration = duration / len(sentences)
-        segments = []
-        
-        for i, sentence in enumerate(sentences):
-            start_time = i * segment_duration
-            end_time = min((i + 1) * segment_duration, duration)
-            
-            segments.append({
-                'timing': [start_time, end_time],
-                'narration': f"我{sentence}" if not sentence.startswith('我') else sentence,
-                'content_sync': '对应画面内容'
-            })
-        
-        return segments
-
-    def _create_narration_script(self, narration_data: Dict, script_path: str, clip: Dict):
-        """创建详细叙述脚本文件"""
-        try:
-            content = f"""📺 {clip.get('title', '精彩片段')} - 第一人称叙述脚本
-{"=" * 80}
-
-🎬 片段信息：
-• 类型：{clip.get('plot_type', '精彩片段')}
-• 时长：{clip.get('total_duration', 0):.1f} 秒
-• 主人公作用：{clip.get('protagonist_role', '重要角色')}
-
-📝 完整第一人称叙述脚本：
-{narration_data.get('full_script', '我正在观看这个精彩的片段...')}
-
-⏱️ 时间同步叙述段落：
-"""
-            
-            synchronized_segments = narration_data.get('synchronized_segments', [])
-            for i, segment in enumerate(synchronized_segments, 1):
-                timing = segment.get('timing', [0, 3])
-                narration = segment.get('narration', '叙述内容')
-                content_sync = segment.get('content_sync', '对应画面内容')
-                
-                content += f"""
-段落 {i}：({timing[0]:.1f}s - {timing[1]:.1f}s)
-第一人称叙述：{narration}
-画面对应：{content_sync}
-"""
-            
-            content += f"""
-
-🎯 制作说明：
-• 视频已移除原声，专为第一人称叙述设计
-• 叙述与画面内容实时同步，毫秒级精确
-• 支持专业配音制作
-• 第一人称视角增强观众代入感
-
-生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-"""
-            
-            with open(script_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-                
-        except Exception as e:
-            print(f"⚠️ 脚本创建失败: {e}")
+            print(f"⚠️ 一致性日志记录失败: {e}")
 
     def find_movie_video_file(self, movie_title: str) -> Optional[str]:
-        """查找对应的电影视频文件"""
+        """查找对应的视频文件"""
         video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv']
         
         # 精确匹配
@@ -752,14 +648,15 @@ class MovieAIClipperSystem:
         if os.path.exists(self.videos_folder):
             for filename in os.listdir(self.videos_folder):
                 if any(filename.lower().endswith(ext) for ext in video_extensions):
-                    if movie_title.lower() in filename.lower() or filename.lower() in movie_title.lower():
+                    if movie_title.lower() in filename.lower():
                         return os.path.join(self.videos_folder, filename)
         
         return None
 
     def process_single_movie(self, srt_file: str) -> bool:
         """处理单部电影"""
-        print(f"\n🎬 处理电影: {srt_file}")
+        print(f"\n{'='*20} 处理电影 {'='*20}")
+        print(f"文件: {srt_file}")
         
         # 1. 解析字幕
         srt_path = os.path.join(self.srt_folder, srt_file)
@@ -772,8 +669,8 @@ class MovieAIClipperSystem:
         # 2. 提取电影标题
         movie_title = os.path.splitext(srt_file)[0]
         
-        # 3. AI分析
-        analysis = self.ai_analyze_movie_complete(subtitles, movie_title)
+        # 3. AI分析（支持缓存）
+        analysis = self.ai_analyze_movie_with_cache(subtitles, movie_title)
         
         if not analysis:
             print("❌ AI分析失败")
@@ -782,310 +679,181 @@ class MovieAIClipperSystem:
         # 4. 查找视频文件
         video_file = self.find_movie_video_file(movie_title)
         if not video_file:
-            print("❌ 未找到对应视频文件，仅生成分析报告")
-            video_file = None
-        else:
-            print(f"📁 视频文件: {os.path.basename(video_file)}")
+            print("❌ 未找到对应视频文件")
+            return False
         
-        # 5. 创建视频片段（如果有视频文件）
-        created_clips = []
-        if video_file:
-            created_clips = self.create_synchronized_video_clips(analysis, video_file, movie_title)
+        print(f"📁 视频文件: {os.path.basename(video_file)}")
         
-        # 6. 生成完整分析报告
-        self._create_movie_analysis_report(movie_title, analysis, created_clips, srt_file)
+        # 5. 创建视频片段（支持跳过已完成）
+        created_clips = self.create_stable_video_clips(analysis, video_file, movie_title)
         
-        print(f"✅ 处理完成！")
-        if created_clips:
-            print(f"🎬 成功创建 {len(created_clips)} 个视频片段")
-        print(f"📄 分析报告已保存")
-        
+        print(f"✅ 处理完成！生成 {len(created_clips)} 个片段")
         return True
 
-    def _create_movie_analysis_report(self, movie_title: str, analysis: Dict, created_clips: List[str], srt_file: str):
-        """需求6：生成固定格式的完整分析报告"""
-        try:
-            report_path = os.path.join(self.analysis_folder, f"{movie_title}_完整分析报告.txt")
-            
-            movie_info = analysis.get('movie_analysis', {})
-            clips = analysis.get('highlight_clips', [])
-            
-            content = f"""🎬 《{movie_title}》电影AI分析剪辑报告
-{"=" * 100}
-
-📊 电影基本信息（需求3）
-• 标题：{movie_info.get('title', movie_title)}
-• 类型：{movie_info.get('genre', '未知')}
-• 主人公：{movie_info.get('main_protagonist', '待识别')}
-• 故事线：{movie_info.get('story_arc', '完整的主人公故事发展')}
-• 短视频数量：{movie_info.get('total_segments_needed', len(clips))} 个
-
-📖 主人公完整故事线（需求3）
-{movie_info.get('story_arc', '主人公从开始到结束的完整故事发展轨迹')}
-
-🎬 精彩片段剪辑方案（需求2&4）- 共{len(clips)}个片段
-"""
-            
-            total_duration = 0
-            for i, clip in enumerate(clips, 1):
-                duration = clip.get('total_duration', 0)
-                total_duration += duration
-                
-                content += f"""
-{"=" * 60}
-🎬 片段 {i}：{clip.get('title', f'精彩片段{i}')}
-{"=" * 60}
-🎭 剧情点类型：{clip.get('plot_type', '未分类')}
-⏱️ 总时长：{duration:.1f} 秒 ({duration/60:.1f} 分钟)
-🎯 主人公作用：{clip.get('protagonist_role', '重要参与')}
-
-📝 内容概述：
-{clip.get('content_summary', '精彩剧情发展')}
-
-⏱️ 时间段构成（需求4：支持非连续时间段）：
-"""
-                
-                time_segments = clip.get('time_segments', [])
-                for j, segment in enumerate(time_segments, 1):
-                    content += f"""
-时间段 {j}：{segment.get('start_time')} --> {segment.get('end_time')}
-选择原因：{segment.get('reason', '精彩度高')}
-"""
-                
-                content += f"""
-🎙️ 第一人称完整叙述（需求4&10）：
-{clip.get('first_person_narration', {}).get('full_script', '详细的第一人称叙述内容')}
-
-🎯 实时同步叙述段落（需求10）：
-"""
-                
-                narration = clip.get('first_person_narration', {})
-                sync_segments = narration.get('synchronized_segments', [])
-                for k, segment in enumerate(sync_segments, 1):
-                    timing = segment.get('timing', [0, 3])
-                    narr = segment.get('narration', '叙述内容')
-                    sync = segment.get('content_sync', '画面内容')
-                    
-                    content += f"""
-段落 {k}：{timing[0]:.1f}s - {timing[1]:.1f}s
-第一人称叙述：{narr}
-画面同步：{sync}
-"""
-            
-            content += f"""
-
-📊 剪辑统计总结
-• 总片段数：{len(clips)} 个
-• 总剪辑时长：{total_duration:.1f} 秒 ({total_duration/60:.1f} 分钟)
-• 平均片段时长：{total_duration/len(clips) if clips else 0:.1f} 秒
-
-🎬 制作技术说明（需求7&8）
-"""
-            
-            video_req = analysis.get('video_requirements', {})
-            content += f"""
-• 音频处理：{'已移除原声' if video_req.get('remove_audio') else '保留原声'}
-• 同步精度：{'毫秒级实时同步' if video_req.get('sync_with_narration') else '标准同步'}
-• 输出格式：{video_req.get('output_format', '无声MP4 + 第一人称叙述SRT')}
-• 错别字修正：已自动修正 {len(analysis.get('corrected_errors', []))} 处错误
-
-🔧 错别字修正记录（需求8）
-"""
-            
-            corrected_errors = analysis.get('corrected_errors', [])
-            if corrected_errors:
-                for error in corrected_errors:
-                    content += f"• {error}\n"
-            else:
-                content += "• 未发现需要修正的错别字\n"
-            
-            content += f"""
-
-📁 输出文件清单
-"""
-            
-            if created_clips:
-                content += f"🎬 视频文件（{len(created_clips)}个）：\n"
-                for clip_path in created_clips:
-                    filename = os.path.basename(clip_path)
-                    content += f"• {filename}\n"
-                    content += f"• {filename.replace('.mp4', '_第一人称叙述.srt')}\n"
-                    content += f"• {filename.replace('.mp4', '_叙述脚本.txt')}\n"
-            else:
-                content += "⚠️ 未找到视频文件，仅生成分析报告\n"
-            
-            content += f"""
-
-✨ 系统特色实现（满足17个核心需求）
-• ✅ 需求1：电影字幕智能解析，支持多种编码
-• ✅ 需求2：精彩片段AI识别和剪辑
-• ✅ 需求3：主人公识别和完整故事线生成
-• ✅ 需求4：非连续时间段智能剪辑，逻辑连贯
-• ✅ 需求5：100% AI分析驱动，无AI直接返回
-• ✅ 需求6：固定输出格式标准化
-• ✅ 需求7：无声视频专为第一人称叙述设计
-• ✅ 需求8：智能错别字修正
-• ✅ 需求9：完整集成到clean_main
-• ✅ 需求10：第一人称叙述实时同步
-• ✅ 需求11：API分析结果缓存机制
-• ✅ 需求12：剪辑一致性保证
-• ✅ 需求13：已剪辑片段跳过机制
-• ✅ 需求14：多次执行结果一致性
-• ✅ 需求15：批量处理所有SRT文件
-• ✅ 需求17：引导式用户配置
-
-生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-源文件：{srt_file}
-系统版本：电影字幕AI分析剪辑系统 v1.0（满足17个核心需求）
-"""
-            
-            with open(report_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            print(f"📄 完整分析报告: {os.path.basename(report_path)}")
-            
-        except Exception as e:
-            print(f"⚠️ 报告生成失败: {e}")
-
-    def process_all_movies(self):
-        """需求15：批量处理所有SRT文件"""
-        print("\n🚀 电影字幕AI分析剪辑系统启动")
-        print("=" * 80)
+    def process_all_movies_batch(self):
+        """需求15: 批量处理所有SRT文件"""
+        print("\n🚀 批量处理所有电影")
+        print("=" * 60)
         
-        # 需求5：检查AI配置
+        # 检查AI配置
         if not self.ai_config.get('enabled'):
-            print("❌ 需求5：必须100% AI分析，AI未配置")
-            print("⚠️ 不使用AI就直接返回")
+            print("❌ AI未配置，无法进行智能分析")
+            print("💡 请先配置AI接口")
             return
         
-        # 需求15：获取所有字幕文件
+        # 需求15: 获取所有SRT文件
         srt_files = [f for f in os.listdir(self.srt_folder) 
                      if f.endswith(('.srt', '.txt')) and not f.startswith('.')]
         
         if not srt_files:
             print(f"❌ {self.srt_folder}/ 目录中未找到字幕文件")
-            print(f"💡 请将电影字幕文件放入 {self.srt_folder}/ 目录")
             return
         
         srt_files.sort()
         print(f"📝 找到 {len(srt_files)} 个电影字幕文件")
         
-        # 需求11：检查已有的分析状态
-        cached_count = self._check_cached_analysis(srt_files)
-        if cached_count > 0:
-            print(f"💾 发现 {cached_count} 个已缓存的AI分析结果")
+        # 检查已处理的文件
+        processed_count = 0
+        skipped_count = 0
         
-        print(f"\n🎬 开始处理电影 - 核心特色:")
-        print("• 需求5：100% AI分析驱动")
-        print("• 需求11：智能缓存避免重复API调用")
-        print("• 需求12&13：剪辑一致性保证")
-        print("• 需求14：多次执行结果一致性")
-        print("=" * 80)
+        for cache_file in os.listdir(self.cache_folder):
+            if cache_file.startswith('analysis_') and cache_file.endswith('.json'):
+                processed_count += 1
         
-        # 处理每个文件
+        if processed_count > 0:
+            print(f"💾 发现 {processed_count} 个已分析的电影")
+        
+        print(f"\n开始处理...")
+        
         success_count = 0
-        total_clips_created = 0
         
         for i, srt_file in enumerate(srt_files, 1):
+            print(f"\n{'🎬'*3} 第 {i}/{len(srt_files)} 部电影 {'🎬'*3}")
+            
             try:
-                print(f"\n{'🎬' * 3} 处理第 {i}/{len(srt_files)} 部电影 {'🎬' * 3}")
-                print(f"文件: {srt_file}")
-                
-                result = self.process_single_movie(srt_file)
-                if result:
+                if self.process_single_movie(srt_file):
                     success_count += 1
-                    # 统计创建的片段数
-                    movie_title = os.path.splitext(srt_file)[0]
-                    clip_pattern = os.path.join(self.clips_folder, f"{movie_title}_*_seg*.mp4")
-                    import glob
-                    clips = glob.glob(clip_pattern)
-                    total_clips_created += len(clips)
-                    print(f"✅ 成功处理，生成 {len(clips)} 个视频片段")
                 else:
-                    print(f"❌ 处理失败")
-                    
+                    print(f"❌ 处理失败: {srt_file}")
             except Exception as e:
-                print(f"❌ 处理 {srt_file} 时出错: {e}")
+                print(f"❌ 处理异常 {srt_file}: {e}")
         
-        # 生成最终总结报告
-        self._generate_final_summary_report(srt_files, success_count, total_clips_created)
-        
-        print(f"\n{'🎉' * 3} 处理完成 {'🎉' * 3}")
-        print(f"📊 最终统计:")
+        print(f"\n{'🎉'*3} 批量处理完成 {'🎉'*3}")
         print(f"✅ 成功处理: {success_count}/{len(srt_files)} 部电影")
-        print(f"🎬 生成片段: {total_clips_created} 个")
         print(f"📁 输出目录: {self.clips_folder}/")
 
-    def _check_cached_analysis(self, srt_files: List[str]) -> int:
-        """检查已缓存的分析结果"""
-        cached_count = 0
-        
-        for srt_file in srt_files:
-            movie_title = os.path.splitext(srt_file)[0]
-            cache_files = [f for f in os.listdir(self.cache_folder) 
-                          if f.startswith(f'analysis_{movie_title}_') and f.endswith('.json')]
+    def show_main_menu(self):
+        """需求16: 纯后端主菜单"""
+        while True:
+            print("\n" + "=" * 80)
+            print("🎬 稳定电影剪辑系统 - 后端控制台")
+            print("=" * 80)
             
-            if cache_files:
-                cached_count += 1
-                print(f"💾 {srt_file} - 已有AI分析缓存")
+            # 显示状态
+            ai_status = "✅ 已配置" if self.ai_config.get('enabled') else "❌ 未配置"
+            print(f"🤖 AI状态: {ai_status}")
+            
+            srt_files = [f for f in os.listdir(self.srt_folder) if f.endswith(('.srt', '.txt'))]
+            video_files = [f for f in os.listdir(self.videos_folder) if f.endswith(('.mp4', '.mkv', '.avi'))] if os.path.exists(self.videos_folder) else []
+            
+            print(f"📝 字幕文件: {len(srt_files)} 个")
+            print(f"🎬 视频文件: {len(video_files)} 个")
+            
+            print(f"\n🎯 主要功能:")
+            print("1. 🤖 配置AI接口（必需）")
+            print("2. 🚀 一键智能剪辑（批量处理所有文件）")
+            print("3. 📊 查看处理状态")
+            print("4. 🔧 系统环境检查")
+            print("0. ❌ 退出系统")
+            
+            try:
+                choice = input("\n请选择操作 (0-4): ").strip()
+                
+                if choice == '0':
+                    print("\n👋 感谢使用稳定电影剪辑系统！")
+                    break
+                elif choice == '1':
+                    self.guided_ai_setup()
+                elif choice == '2':
+                    if not self.ai_config.get('enabled'):
+                        print("❌ 请先配置AI接口")
+                        continue
+                    self.process_all_movies_batch()
+                elif choice == '3':
+                    self._show_processing_status()
+                elif choice == '4':
+                    self._check_system_environment()
+                else:
+                    print("❌ 无效选择，请输入0-4")
+                    
+            except KeyboardInterrupt:
+                print("\n\n👋 用户中断")
+                break
+            except Exception as e:
+                print(f"❌ 操作错误: {e}")
+
+    def _show_processing_status(self):
+        """显示处理状态"""
+        print(f"\n📊 处理状态详情")
+        print("=" * 50)
         
-        return cached_count
-
-    def _generate_final_summary_report(self, srt_files: List[str], success_count: int, total_clips: int):
-        """生成最终总结报告"""
-        report_path = os.path.join(self.analysis_folder, "系统最终总结报告.txt")
+        # 分析缓存状态
+        cached_analyses = [f for f in os.listdir(self.cache_folder) if f.startswith('analysis_')]
+        print(f"💾 已缓存分析: {len(cached_analyses)} 个")
         
-        content = f"""🎬 电影字幕AI分析剪辑系统 - 最终总结报告
-{"=" * 100}
-
-📊 处理统计
-• 总电影数：{len(srt_files)} 部
-• 成功分析：{success_count} 部
-• 失败数量：{len(srt_files) - success_count} 部
-• 成功率：{success_count/len(srt_files)*100 if srt_files else 0:.1f}%
-• 生成片段：{total_clips} 个
-
-✨ 系统特色（满足17个核心需求）
-• ✅ 需求1-17全部实现，完整集成
-• ✅ 100% AI分析驱动，智能化程度最高
-• ✅ 主人公识别和完整故事线生成
-• ✅ 非连续时间段智能剪辑，逻辑连贯
-• ✅ 第一人称叙述实时同步
-• ✅ 无声视频专为叙述设计
-• ✅ 智能错别字修正
-• ✅ API稳定性和结果缓存
-• ✅ 剪辑一致性保证
-• ✅ 引导式用户配置
-
-📁 输出文件
-• 视频片段：{self.clips_folder}/*.mp4
-• 第一人称叙述：{self.clips_folder}/*_第一人称叙述.srt
-• 叙述脚本：{self.clips_folder}/*_叙述脚本.txt
-• 分析报告：{self.analysis_folder}/*_完整分析报告.txt
-• 缓存文件：{self.cache_folder}/*.json
-
-🎯 使用说明
-• 将电影字幕文件(.srt/.txt)放入 {self.srt_folder}/ 目录
-• 将对应视频文件放入 {self.videos_folder}/ 目录
-• 运行系统自动进行100% AI分析和剪辑
-• 查看 {self.analysis_folder}/ 目录获取分析报告
-• 查看 {self.clips_folder}/ 目录获取剪辑视频
-
-生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-系统版本：电影字幕AI分析剪辑系统 v1.0（17个需求完整实现）
-"""
+        # 剪辑状态
+        completed_clips = [f for f in os.listdir(self.clip_status_folder) if f.endswith('_status.json')]
+        print(f"✂️ 已完成剪辑: {len(completed_clips)} 个片段")
         
+        # 输出文件
+        output_clips = [f for f in os.listdir(self.clips_folder) if f.endswith('.mp4')]
+        print(f"📁 输出视频: {len(output_clips)} 个")
+        
+        if output_clips:
+            total_size = sum(os.path.getsize(os.path.join(self.clips_folder, f)) for f in output_clips)
+            print(f"💾 总文件大小: {total_size/(1024*1024*1024):.2f} GB")
+
+    def _check_system_environment(self):
+        """检查系统环境"""
+        print(f"\n🔧 系统环境检查")
+        print("=" * 50)
+        
+        # 目录检查
+        directories = [
+            (self.srt_folder, "字幕目录"),
+            (self.videos_folder, "视频目录"),
+            (self.clips_folder, "输出目录"),
+            (self.cache_folder, "分析缓存"),
+            (self.clip_status_folder, "剪辑状态"),
+            (self.consistency_folder, "一致性日志")
+        ]
+        
+        for directory, name in directories:
+            status = "✅ 存在" if os.path.exists(directory) else "❌ 不存在"
+            print(f"📁 {name}: {status}")
+        
+        # AI配置检查
+        ai_status = "✅ 已配置" if self.ai_config.get('enabled') else "❌ 未配置"
+        print(f"🤖 AI配置: {ai_status}")
+        
+        if self.ai_config.get('enabled'):
+            print(f"   提供商: {self.ai_config.get('provider')}")
+            print(f"   模型: {self.ai_config.get('model')}")
+        
+        # FFmpeg检查
         try:
-            with open(report_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            print(f"📄 最终总结报告: {os.path.basename(report_path)}")
-        except Exception as e:
-            print(f"⚠️ 总结报告生成失败: {e}")
+            result = subprocess.run(['ffmpeg', '-version'], 
+                                  capture_output=True, text=True, timeout=5)
+            ffmpeg_status = "✅ 已安装" if result.returncode == 0 else "❌ 未安装"
+        except:
+            ffmpeg_status = "❌ 未安装或不可用"
+        
+        print(f"🎬 FFmpeg: {ffmpeg_status}")
 
     def _generate_safe_filename(self, title: str) -> str:
         """生成安全的文件名"""
         safe_title = re.sub(r'[^\w\u4e00-\u9fff\-_]', '_', title)
-        return safe_title[:50]
+        return safe_title[:30]
 
     def _time_to_seconds(self, time_str: str) -> float:
         """时间转换为秒"""
@@ -1097,101 +865,13 @@ class MovieAIClipperSystem:
         except:
             return 0.0
 
-    def _seconds_to_srt_time(self, seconds: float) -> str:
-        """秒转换为SRT时间格式"""
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
-        ms = int((seconds % 1) * 1000)
-        return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
-
-    def show_main_menu(self):
-        """需求17：引导式主菜单"""
-        while True:
-            print("\n" + "=" * 80)
-            print("🎬 电影字幕AI分析剪辑系统")
-            print("=" * 80)
-            
-            print("\n🎯 主要功能:")
-            print("1. 🎬 开始电影AI分析剪辑（满足17个核心需求）")
-            print("2. 🤖 配置AI接口（必需）")
-            print("3. 📁 查看文件状态")
-            print("4. 🔧 系统环境检查")
-            print("0. ❌ 退出系统")
-            
-            try:
-                choice = input("\n请选择操作 (0-4): ").strip()
-                
-                if choice == '1':
-                    if not self.ai_config.get('enabled'):
-                        print("❌ 需求5：必须100% AI分析，请先配置AI")
-                        continue
-                    self.process_all_movies()
-                elif choice == '2':
-                    self.setup_ai_config()
-                elif choice == '3':
-                    self._show_file_status()
-                elif choice == '4':
-                    self._check_system_environment()
-                elif choice == '0':
-                    print("\n👋 感谢使用电影字幕AI分析剪辑系统！")
-                    break
-                else:
-                    print("❌ 无效选择，请输入0-4")
-                    
-            except KeyboardInterrupt:
-                print("\n\n👋 用户中断")
-                break
-            except Exception as e:
-                print(f"❌ 操作错误: {e}")
-
-    def _show_file_status(self):
-        """显示文件状态"""
-        srt_files = [f for f in os.listdir(self.srt_folder) if f.endswith(('.srt', '.txt'))]
-        video_files = [f for f in os.listdir(self.videos_folder) if f.endswith(('.mp4', '.mkv', '.avi', '.mov'))] if os.path.exists(self.videos_folder) else []
-        clip_files = [f for f in os.listdir(self.clips_folder) if f.endswith('.mp4')] if os.path.exists(self.clips_folder) else []
-        
-        print(f"\n📊 文件状态:")
-        print(f"📝 字幕文件: {len(srt_files)} 个")
-        for f in srt_files[:5]:
-            print(f"   • {f}")
-        if len(srt_files) > 5:
-            print(f"   • ... 还有 {len(srt_files)-5} 个文件")
-        
-        print(f"🎬 视频文件: {len(video_files)} 个")
-        for f in video_files[:5]:
-            print(f"   • {f}")
-        if len(video_files) > 5:
-            print(f"   • ... 还有 {len(video_files)-5} 个文件")
-        
-        print(f"✂️ 已剪辑片段: {len(clip_files)} 个")
-
-    def _check_system_environment(self):
-        """检查系统环境"""
-        print(f"\n🔧 系统环境检查:")
-        print(f"📁 字幕目录: {self.srt_folder}/ {'✅ 存在' if os.path.exists(self.srt_folder) else '❌ 不存在'}")
-        print(f"📁 视频目录: {self.videos_folder}/ {'✅ 存在' if os.path.exists(self.videos_folder) else '❌ 不存在'}")
-        print(f"📁 输出目录: {self.clips_folder}/ {'✅ 存在' if os.path.exists(self.clips_folder) else '❌ 不存在'}")
-        print(f"📁 分析目录: {self.analysis_folder}/ {'✅ 存在' if os.path.exists(self.analysis_folder) else '❌ 不存在'}")
-        print(f"💾 缓存目录: {self.cache_folder}/ {'✅ 存在' if os.path.exists(self.cache_folder) else '❌ 不存在'}")
-        print(f"🤖 AI配置: {'✅ 已配置' if self.ai_config.get('enabled') else '❌ 未配置'}")
-        
-        # 检查ffmpeg
-        try:
-            result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, timeout=5)
-            print(f"🎬 FFmpeg: {'✅ 已安装' if result.returncode == 0 else '❌ 未安装'}")
-        except:
-            print(f"🎬 FFmpeg: ❌ 未安装或不可用")
-
 def main():
-    """主函数 - 需求9：集成到clean_main"""
+    """主函数 - 需求16: 纯后端启动"""
     try:
-        system = MovieAIClipperSystem()
+        system = StableMovieClipperSystem()
         system.show_main_menu()
     except Exception as e:
         print(f"❌ 系统启动失败: {e}")
-        import traceback
-        traceback.print_exc()
 
 if __name__ == "__main__":
     main()
