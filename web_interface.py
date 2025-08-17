@@ -2,7 +2,7 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import json
 import os
-from subtitle_analyzer import SubtitleAnalyzer
+from subtitle_analyzer import IntelligentSubtitleAnalyzer
 from video_clipper import VideoClipper
 
 app = Flask(__name__)
@@ -15,7 +15,7 @@ def index():
 def analyze():
     """分析字幕并返回精彩片段"""
     try:
-        analyzer = SubtitleAnalyzer()
+        analyzer = IntelligentSubtitleAnalyzer()
         all_segments = []
         
         # 获取所有字幕文件
